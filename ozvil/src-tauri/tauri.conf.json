@@ -53,7 +53,6 @@
       "digestAlgorithm": "sha256",
       "timestampUrl": "http://timestamp.digicert.com",
       "nsis": {
-        "license": "nsis/license.rtf",
         "installMode": "currentUser",
         "languages": ["English"],
         "displayLanguageSelector": false
