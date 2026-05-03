@@ -1,0 +1,1267 @@
+# Ozvil Windows Workload Modes Plan
+
+## Summary
+
+Ozvil is a Windows-first desktop utility that automatically prepares a PC for heavy creative, developer, gaming, and local AI workloads, then restores the system afterward.
+
+The v1 product targets Windows users who feel real performance friction from background apps, cloud sync, browser memory pressure, power-plan throttling, laptop sleep, and noisy interruptions during heavy work. Ozvil detects selected heavy apps/processes, activates user-approved workload profiles, prevents sleep, applies Windows power settings where safe, monitors CPU/RAM/battery risk, pauses user-approved background apps, logs every action, and restores prior state when the session ends.
+
+This file is the source of truth during implementation. Every phase must update status, test evidence, open risks, and completion notes before moving forward.
+
+Technical feasibility references:
+
+- Tauri v2 testing supports unit/integration tests with mock runtime: https://v2.tauri.app/develop/tests/
+- Tauri v2 supports bundled sidecar binaries: https://tauri.app/develop/sidecar/
+- Tauri v2 updater supports signed update artifacts and platform-specific releases: https://v2.tauri.app/ko/plugin/updater/
+- Windows `powercfg` supports power scheme inspection and switching: https://learn.microsoft.com/en-us/windows-hardware/design/device-experiences/powercfg-command-line-options
+- Windows `SetThreadExecutionState` can prevent sleep/display idle while an app is running: https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-setthreadexecutionstate
+
+## Product Positioning
+
+Working name: Ozvil
+
+Core promise:
+
+> When heavy work starts, Ozvil clears the runway for your Windows PC, protects the session, and restores everything afterward.
+
+Primary Windows audiences:
+
+- Video editors and colorists
+- Music producers and podcasters
+- Developers and local AI users
+- Game developers and gamers running heavy sessions
+- Graphic designers
+- Animators and 3D artists
+- Streamers, presenters, and screen recorders
+
+V1 positioning:
+
+- Windows workload modes for heavy apps.
+- Profile-based automation, not hidden AI.
+- Visible, reversible, user-approved system changes.
+- Lower background pressure and interruption risk, not fake "RAM boosting."
+
+Avoid in v1 messaging:
+
+- RAM cleaner
+- Magic performance booster
+- PC cleaner
+- Registry optimizer
+- Invisible AI administrator
+- Automatic app killing
+
+## Key Architecture
+
+Use Tauri v2 + Rust + React + TypeScript + Vite.
+
+Use SQLite for local persistence:
+
+- Profiles
+- Rules
+- Sessions
+- Activity logs
+- System snapshots
+- Approved background apps
+- Approved scripts
+- Settings
+
+Use a shared Rust core for:
+
+- Adaptive Windows monitoring loop
+- Trigger evaluation
+- Profile activation/deactivation
+- State snapshots
+- Restore lifecycle
+- Stale session recovery
+- Activity logging
+- CLI command handling
+- Windows adapter contract
+
+Use a Windows native adapter for:
+
+- Process and app detection
+- CPU and memory readings
+- Battery and AC power status
+- Windows power capability detection, including Modern Standby/OEM limitations
+- Sleep prevention
+- Power plan inspection/switching
+- User-approved background app pause/quit
+- Best-effort interruption reduction where safely supported
+- User-approved PowerShell/script hooks
+
+Architecture:
+
+```text
+Ozvil Windows App
+  |
+  |-- React + TypeScript UI
+  |     |-- Dashboard
+  |     |-- Profile Editor
+  |     |-- Activity Log
+  |     |-- Dry Run Preview
+  |     |-- Restore Center
+  |     |-- Settings
+  |
+  |-- Tauri Command Bridge
+  |
+  |-- Rust Core
+  |     |-- Rules Engine
+  |     |-- Windows Monitor
+  |     |-- Session Manager
+  |     |-- Snapshot/Restore Manager
+  |     |-- Activity Logger
+  |     |-- CLI Interface
+  |     |-- SQLite Data Layer
+  |
+  |-- Windows Adapter
+        |-- Process Provider
+        |-- Performance Provider
+        |-- Power Provider
+        |-- Sleep Prevention Provider
+        |-- App Control Provider
+        |-- Notification/Focus Provider
+```
+
+## V1 Product Scope
+
+V1 includes:
+
+- Windows app/process detection
+- CPU and memory threshold triggers
+- Burst-aware activity tracking for studio/audio workflows
+- Adaptive low-overhead monitoring
+- Built-in workload profiles
+- Custom editable profiles
+- CLI commands for developer/power-user workflows
+- JSON profile import/export
+- JSON/CSV activity log export
+- Prevent sleep during active sessions
+- Windows power plan or power mode action where safely supported
+- Power capability detection before attempting power-plan changes
+- User-approved background app pause/quit
+- User-approved cloud-sync app pause/quit presets
+- RAM pressure warnings
+- CPU pressure warnings
+- Real-time top offender list for CPU/RAM pressure
+- Battery and power-source warnings
+- Hang/stall alerts for approved developer/local AI processes
+- Agent-readable CLI status output
+- Safe Mode startup flag and startup safety hatch
+- Dedicated Windows Start Menu shortcut for Ozvil Safe Mode
+- Activity log retention, pruning, and rate limiting
+- Manual interruption checklist for Recording Mode and Game Mode Plus
+- Approved profile start/restore scripts
+- Dry-run mode
+- Manual start/stop
+- One-click restore
+- Global automation pause
+- Crash-safe cleanup for active system locks
+- Startup reconciliation for unfinished sessions after Ozvil crashes, is force-quit, or Windows reboots
+
+V1 excludes:
+
+- Aggressive RAM cleaning
+- Registry cleaning
+- Kernel drivers
+- Virtual audio drivers
+- Hidden process killing
+- Fully autonomous AI decisions
+- Enterprise policy management
+- Network/domain blocking
+- Automatic process restart on hang
+- Default telemetry
+- macOS support
+
+Fast-follow v1.1 candidates:
+
+- Bandwidth/network warnings during heavy sessions.
+- User-approved recovery command for suspected hung local AI/dev workflows.
+- Community/shareable profile packs.
+- Profile-specific bottleneck monitoring for disk I/O, GPU pressure, scratch disk pressure, and frame pacing where low-overhead Windows APIs allow it.
+- Sequential profile dependency scripts, such as starting Docker containers before Build Mode and shutting them down during restore.
+- Local webhook or Stream Deck integration for hardware control, after auth/security design.
+- ASIO/audio-driver stream research after validating v1 Studio Mode behavior, with no custom virtual audio driver in scope.
+- Advanced process priority tuning for explicitly approved apps, limited to safe levels such as Above Normal.
+
+Deferred:
+
+- Network/domain blocking, because it can conflict with VPNs, DNS, firewall rules, and user trust.
+- Automatic restart on hang, because it can destroy work or hide real failures unless tightly constrained.
+- UI automation or registry hacks for Windows Focus/notification control, because they are brittle across Windows updates.
+- Exact VRAM/GPU allocation claims until low-overhead reliable metrics are validated across Windows GPU vendors and local AI backends.
+- Local HTTP/webhook control endpoints without an authentication and local-only security model.
+- macOS support, unless Windows v1 validates demand and cross-platform expansion becomes valuable.
+
+## Application-Specific Processing Rule
+
+Ozvil must evolve from generic CPU/RAM monitoring toward profile-specific bottleneck awareness. V1 may implement only safe, low-overhead subsets, but all future design should respect the workload architecture below.
+
+- Render Mode: prioritize GPU compute, sustained disk I/O, external/cache drive availability, AC power, sleep prevention, and power throttling warnings.
+- Build Mode: prioritize disk I/O conflicts, file locks, cloud-sync interference, RAM pressure, local AI stalls, and long-running process health.
+- Design Mode: prioritize RAM pressure, scratch disk pressure, background disk spikes, and cloud-sync/file-lock risk.
+- Game Mode Plus: prioritize frame pacing, background CPU wakeups, RAM pressure, and safe interruption reduction.
+- Studio Mode: prioritize DAW/manual session protection, audio-driver activity where feasible, bursty CPU behavior, and avoiding false idle detection.
+- Recording Mode: prioritize sleep prevention, interruption reduction, CPU/RAM pressure, and background app noise.
+
+Design rule:
+
+- Every new profile action or trigger must identify which workload bottleneck it protects.
+- Deep telemetry such as GPU, ASIO, PCIe, external drive sleep, frame pacing, and scratch disk monitoring is future scope unless a low-overhead Windows API is validated.
+- VRAM/GPU metrics are experimental until reliable low-overhead Windows APIs are validated across NVIDIA, AMD, Intel, browser-hosted local AI, Python backends, and WSL-style workflows.
+- ASIO activity cannot be assumed visible through WASAPI; true ASIO detection remains research-only and must not require a virtual audio driver in v1/v1.1.
+- Generic CPU/RAM thresholds are fallback signals, not the long-term product moat.
+
+## Built-In Profiles
+
+### Render Mode
+
+Audience:
+
+- Video editors
+- Animators
+- 3D artists
+- Colorists
+
+Default triggers:
+
+- App/process running: DaVinci Resolve, Premiere Pro, After Effects, Blender, Cinema 4D, Media Encoder
+- Optional process CPU threshold above 60 percent for 120 seconds
+- Manual CLI/UI start
+
+Default actions:
+
+- Prevent sleep
+- Switch to approved high-performance power plan where configured
+- Watch battery and AC power
+- Watch RAM pressure
+- Watch CPU pressure
+- Watch disk I/O and GPU pressure when low-overhead metrics are validated
+- Warn about cache/external drive risk when the render workflow depends on removable or external storage
+- Pause user-approved cloud-sync/background apps
+- Restore on app quit, resource idle, or manual stop
+
+### Studio Mode
+
+Audience:
+
+- Music producers
+- Podcasters
+- Audio engineers
+
+Default triggers:
+
+- App/process running: FL Studio, Ableton Live, Reaper, Pro Tools, Audition, Cubase
+- Foreground DAW window or known export/render/plugin-host window title where safely detectable
+- Manual Studio Mode start for recording, composing, or mixing sessions
+- Burst-aware CPU/audio activity as a supporting signal, not the only trigger
+- Do not rely on millisecond CPU spike detection for activation; DAW/manual triggers are primary
+- Do not detect fine-grained app-internal control interactions such as individual knob or plugin parameter manipulation
+
+Default actions:
+
+- Prevent sleep
+- Reduce interruptions where safely supported
+- Watch CPU and RAM pressure
+- Avoid declaring session idle too quickly
+- Pause user-approved background apps
+- Restore on app quit or manual stop
+
+### Build Mode
+
+Audience:
+
+- Developers
+- Local AI users
+
+Default triggers:
+
+- App/process running: Docker Desktop, WSL, Visual Studio, UnrealBuildTool, MSBuild, node, npm, python, cargo, ollama, llama.cpp
+- CPU or RAM threshold sustained for configured duration
+- Manual CLI/UI start
+
+Default actions:
+
+- Prevent sleep
+- Watch RAM pressure
+- Watch CPU pressure
+- Watch battery and AC power
+- Watch disk I/O pressure and cloud-sync/file-lock risk
+- Alert if an approved long-running local AI/dev process appears stalled, such as near-zero CPU for a configured duration while still running
+- Pause user-approved sync apps
+- Export logs for failed/hung sessions
+- Restore on process idle or manual stop
+
+### Game Mode Plus
+
+Audience:
+
+- Gamers
+- Game developers
+- Streamers
+
+Default triggers:
+
+- App/process running: Steam game process, Epic game process, Unity, Unreal Editor, OBS
+- Manual CLI/UI start
+
+Default actions:
+
+- Prevent sleep
+- Switch to approved high-performance power plan where configured
+- Watch CPU and RAM pressure
+- Watch background CPU wakeups and frame-pacing risk when low-overhead metrics are validated
+- Show manual interruption checklist if Windows interruption reduction is unavailable
+- Pause user-approved background apps
+- Restore on app quit or manual stop
+
+### Design Mode
+
+Audience:
+
+- Graphic designers
+- Product designers
+- Visual designers
+
+Default triggers:
+
+- App/process running: Photoshop, Illustrator, InDesign, Figma, Affinity Designer, CorelDRAW
+- Local AI image generation backend running: Stable Diffusion WebUI, ComfyUI, InvokeAI, Fooocus, python/pythonw model processes
+- Browser UI connected to local AI image generation is treated as a Design Mode supporting signal only when a local backend process is detected
+- Manual UI start
+
+Default actions:
+
+- Reduce interruptions where safely supported
+- Watch RAM pressure
+- Watch CPU pressure
+- Watch local AI image generation pressure, including VRAM/GPU and model/cache disk writes when low-overhead metrics are validated
+- Watch scratch-disk/background disk pressure when low-overhead metrics are validated
+- Pause user-approved background apps
+- Restore on app quit
+
+### Recording Mode
+
+Audience:
+
+- Streamers
+- Presenters
+- Screen recorders
+
+Default triggers:
+
+- App/process running: OBS, Streamlabs, Camtasia, Zoom, Teams, PowerPoint
+- Manual CLI/UI start
+
+Default actions:
+
+- Prevent sleep
+- Reduce interruptions where safely supported
+- Show manual interruption checklist if Windows interruption reduction is unavailable
+- Watch battery and AC power
+- Watch CPU and RAM pressure
+- Restore on app quit or manual stop
+
+## Core Interfaces
+
+Frontend-facing profile model:
+
+```ts
+type Profile = {
+  id: string;
+  name: string;
+  modeType: "render" | "studio" | "build" | "game" | "design" | "recording" | "custom";
+  triggers: Trigger[];
+  actions: Action[];
+  restorePolicy: "on_app_quit" | "on_resource_idle" | "manual";
+  approvalMode: "ask_first" | "automatic_after_trusted";
+  enabled: boolean;
+};
+
+type Trigger =
+  | { kind: "app_running"; appId: string }
+  | { kind: "process_running"; processName: string }
+  | { kind: "cpu_above"; processName?: string; percent: number; durationSeconds: number }
+  | { kind: "memory_above"; processName?: string; mb: number; durationSeconds: number }
+  | { kind: "manual_cli"; profileId: string }
+  | { kind: "manual_ui"; profileId: string };
+
+type Action =
+  | { kind: "prevent_sleep" }
+  | { kind: "reduce_interruptions" }
+  | { kind: "set_power_plan"; planId: string }
+  | { kind: "pause_approved_app"; appId: string }
+  | { kind: "watch_battery"; warnBelowPercent: number }
+  | { kind: "watch_memory"; warnAbovePercent: number }
+  | { kind: "watch_cpu"; warnAbovePercent: number }
+  | { kind: "run_approved_script"; scriptId: string };
+```
+
+Rust Windows adapter contract:
+
+```rust
+trait WindowsAdapter {
+    fn list_processes(&self) -> Result<Vec<ProcessInfo>>;
+    fn read_system_status(&self) -> Result<SystemStatus>;
+    fn snapshot_state(&self, actions: &[Action]) -> Result<SystemSnapshot>;
+    fn apply_action(&self, action: &Action) -> Result<ActionResult>;
+    fn restore_snapshot(&self, snapshot: &SystemSnapshot) -> Result<RestoreResult>;
+}
+```
+
+CLI commands:
+
+```bash
+ozvil status
+ozvil status --agent
+ozvil --safe-mode
+ozvil safe-start
+ozvil profiles list
+ozvil start <profile-id-or-name>
+ozvil dry-run <profile-id-or-name>
+ozvil stop
+ozvil restore
+ozvil logs export --format json
+ozvil logs export --format csv
+ozvil profile export <profile-id-or-name>
+ozvil profile import <path>
+```
+
+Agent-readable status output:
+
+```json
+{"mode":"build","pressure":"high","ram":87,"cpu":72,"battery":41,"recommendation":"pause_background"}
+```
+
+Safe Mode behavior:
+
+- `ozvil --safe-mode` and `ozvil safe-start` launch Ozvil with all automation disabled.
+- The Windows installer must create a dedicated Start Menu shortcut named `Ozvil (Safe Mode)` that passes the safe-mode flag.
+- Holding Shift during UI startup may request Safe Mode where technically feasible, but it is only a convenience path, not the primary safety hatch.
+- Safe Mode must allow profile editing/deletion, log export, manual restore, and Global Pause control.
+- Safe Mode must not run profiles, scripts, app pauses, or power actions on startup.
+
+## Trust Layer
+
+Ozvil must prove what it is doing.
+
+Every activation shows:
+
+- Active profile
+- Trigger source
+- Runtime
+- CPU status
+- RAM status
+- Battery/AC status
+- Active actions
+- Restore readiness
+
+Every action logs:
+
+- Timestamp
+- Profile/session id
+- Trigger
+- Action attempted
+- Result
+- Failure reason, if any
+- Restore status
+
+The UI must include:
+
+- Before/after "what changed" view
+- Live active mode panel
+- Real-time top offender list for CPU/RAM pressure
+- Activity log
+- JSON/CSV log export
+- Profile import/export
+- Dry-run preview
+- Manual restore
+- Stale session restore prompt after Ozvil restarts from an unclean exit
+- Global automation pause
+- Clear permission errors
+
+Default first-run behavior:
+
+- Ask before applying profile.
+- Show dry-run preview.
+- Allow automatic mode only after the user trusts the profile.
+
+## Phase Checklist
+
+| Phase | Status | Goal | Exit Criteria |
+|---|---|---|---|
+| 0. Windows Plan Pivot | Completed | Rewrite the plan for Windows-only v1 | Plan.md reflects Windows-only development and macOS is deferred |
+| 1. Windows Product Spec | Planned | Finalize v1 UX, profiles, safety model, and Windows primitives | User flows, profile behavior, restore rules, app catalog, and Windows constraints are documented |
+| 2. App Scaffold | Planned | Create Tauri app foundation | Dev build opens, React UI loads, Rust commands callable |
+| 3. Windows Feasibility Spike | Planned | Validate native Windows primitives before deep product build | Process, power, sleep, memory, battery, app-control, and restore feasibility confirmed on Windows |
+| 4. Data Layer | Planned | Add SQLite persistence | Profiles, sessions, logs, snapshots, settings stored locally |
+| 5. Rules Engine | Planned | Evaluate triggers and activate profiles | Unit-tested trigger evaluation, conflict handling, session lifecycle, stale session recovery |
+| 6. Windows Adapter | Planned | Implement native Windows system controls | Process detection, sleep prevention, power plans, system monitoring, restore tested on Windows |
+| 7. CLI + Log/Profile Export | Planned | Add developer and beta-support surfaces | CLI commands work; logs export as JSON/CSV; profiles import/export as JSON |
+| 8. Trust UI | Planned | Build dashboard, profiles, logs, dry-run, restore | Active mode, dry-run, activity log, export, restore, and settings screens work |
+| 9. End-to-End Windows MVP | Planned | Validate full workflow on Windows | Heavy-app session activates, logs, restores, and passes acceptance scenarios |
+| 10. Packaging + Beta Readiness | Planned | Prepare controlled Windows beta | Windows installer builds; known risks, signing, support, and beta checklist complete |
+
+Status convention:
+
+- Planned: not started.
+- In Progress: actively being worked on.
+- Blocked: cannot proceed without decision or dependency.
+- Ready For Test: implementation complete, awaiting verification.
+- Completed: tests and exit criteria passed.
+- Deferred: intentionally moved out of v1.
+
+Each phase must include:
+
+- Status
+- Objective
+- Tasks
+- Test gate
+- Exit criteria
+- Notes/risks
+- Completion evidence
+
+## Detailed Development Plan
+
+### Phase 0: Windows Plan Pivot
+
+Status: Completed
+
+Objective:
+
+- Replace the cross-platform/macOS-first plan with a Windows-only v1 plan.
+
+Tasks:
+
+- Rewrite product positioning for Windows.
+- Remove macOS v1 work.
+- Add Windows-specific primitives.
+- Add CLI/log export to v1.
+- Add Windows feasibility spike before deep implementation.
+
+Test gate:
+
+- Confirm `Plan.md` states Windows-only v1 and macOS is deferred.
+
+Exit criteria:
+
+- This document is the active implementation plan.
+
+Completion evidence:
+
+- `/Users/macz/Documents/BG_DAEMON/Plan.md` rewritten for Windows-only v1.
+
+### Phase 1: Windows Product Spec
+
+Status: Planned
+
+Objective:
+
+- Turn the Windows product idea into precise v1 behavior before writing app code.
+
+Tasks:
+
+- Define onboarding flow.
+- Define Windows permissions/admin boundaries.
+- Define built-in profile defaults.
+- Define Windows app/process catalog v1.
+- Define activation/deactivation rules.
+- Define restore rules.
+- Define stale session recovery after Ozvil crash, force-quit, or Windows reboot.
+- Define global pause behavior.
+- Define emergency restore behavior.
+- Define first-run "ask before applying" behavior.
+- Define what happens when an action fails.
+- Define Windows interruption-reduction behavior and limitations.
+- Define adaptive monitoring resource budget and idle/active polling intervals.
+- Define monitoring self-overhead limits and measurement method.
+- Define power capability detection behavior for Modern Standby/OEM-restricted devices.
+- Define top offender list behavior for CPU/RAM pressure.
+- Define hang/stall alert thresholds for approved local AI/dev processes.
+- Define profile-specific bottleneck strategy for each built-in mode.
+- Define simulated Windows adapter fixture format for black-box scenario tests.
+- Define `status --agent` minimal JSON contract.
+- Define Safe Mode startup behavior for CLI, UI startup, and corrupt profile recovery.
+- Define activity log retention, pruning, rate limiting, and maximum database size policy.
+- Define approved start/restore script behavior, timeouts, failure handling, and restore ordering.
+- Define manual interruption checklist content for Recording Mode and Game Mode Plus.
+- Define hardware control path through CLI commands for v1.
+- Define Global Pause precedence for new triggers, existing sessions, manual activation, and emergency restore.
+- Define Battery Saver/OEM sleep override warnings and user guidance.
+- Define conflict tie-breakers for simultaneous app-specific triggers.
+
+Conflict defaults:
+
+- Emergency restore can always run, even when Global Pause is active.
+- Global Pause blocks all new automatic activations.
+- Manual activation while Global Pause is active requires explicit confirmation or a temporary pause override.
+- Existing active sessions continue unless the user chooses "pause and restore now."
+- Manual CLI/UI activation is sticky and beats automatic activation.
+- Automatic profiles cannot replace an active manual profile; Ozvil logs the match and may suggest switching.
+- Recording and Studio modes beat other automatic profiles because interruption risk is highest.
+- Foreground app profile beats background app profile where foreground detection is available.
+- More recently activated foreground app wins remaining ties.
+- If still tied, keep current active profile and log the suppressed match.
+
+Test gate:
+
+- Review each built-in profile against at least one realistic Windows workflow.
+
+Exit criteria:
+
+- V1 behavior is clear enough to implement without product decisions.
+
+### Phase 2: App Scaffold
+
+Status: Planned
+
+Objective:
+
+- Create the Tauri v2 application foundation.
+
+Tasks:
+
+- Initialize Tauri v2 app with React, TypeScript, Vite, and Rust.
+- Add base layout.
+- Add dashboard placeholder.
+- Add profile editor placeholder.
+- Add activity log placeholder.
+- Add settings placeholder.
+- Add Tauri command bridge health check.
+- Add CLI crate/binary placeholder.
+- Add simulated-adapter test harness placeholder for CLI-driven black-box tests.
+- Add development scripts.
+
+Test gate:
+
+- Run frontend typecheck.
+- Run Rust check.
+- Launch dev app.
+- Confirm frontend can call a Rust command.
+- Confirm CLI binary can call shared core health check.
+- Confirm CLI can run against a simulated adapter fixture in test mode.
+
+Exit criteria:
+
+- Local development loop works.
+
+### Phase 3: Windows Feasibility Spike
+
+Status: Planned
+
+Objective:
+
+- Validate the Windows primitives before the core engine bakes in wrong assumptions.
+
+Tasks:
+
+- Confirm process enumeration approach.
+- Confirm CPU/RAM sampling approach.
+- Confirm slow/expensive Windows metric sources to avoid, such as WMI in tight loops.
+- Confirm low-overhead APIs for per-process CPU/RAM and document rejected expensive approaches.
+- Confirm feasibility/cost of disk I/O, GPU, frame pacing, scratch disk, and audio-driver metrics for future profile-specific processing.
+- Confirm battery and AC power source approach.
+- Confirm sleep prevention using non-persistent Windows execution-state/power APIs.
+- Confirm Battery Saver/OEM policy behavior when sleep prevention is requested on battery.
+- Confirm Modern Standby/S0ix detection and OEM power-plan limitation behavior.
+- Confirm current power plan inspection and restore approach.
+- Confirm safe power plan switching requirements and permission behavior.
+- Confirm fallback behavior when high-performance plans are hidden, disabled, or unavailable.
+- Confirm user-approved app pause/quit behavior.
+- Confirm notification/focus limitations.
+- Confirm whether ASIO/audio-driver stream detection is feasible for future Studio Mode refinement.
+- Confirm ASIO/WASAPI visibility limits and document that no virtual audio driver is in v1/v1.1 scope.
+- Confirm stale session recovery approach after app crash/reboot.
+- Confirm Windows VM or physical Windows test environment.
+
+Test gate:
+
+- Run a small Windows prototype or spike harness for each primitive.
+- Document required permissions and unsupported actions.
+
+Exit criteria:
+
+- Windows adapter contract is validated before full engine implementation.
+
+### Phase 4: Data Layer
+
+Status: Planned
+
+Objective:
+
+- Persist Ozvil state locally with SQLite.
+
+Tasks:
+
+- Add SQLite crate and migration system.
+- Create tables for profiles, triggers, actions, sessions, logs, snapshots, approved apps, approved scripts, and settings.
+- Seed built-in Windows profiles.
+- Add repository/service layer in Rust.
+- Expose read/write commands to UI and CLI.
+- Add JSON import/export for profiles.
+- Add JSON/CSV export for activity logs.
+- Add log retention configuration.
+- Add log pruning job.
+- Add repeated-event rate limiting or aggregation for noisy active/idle transitions.
+- Add detailed/debug log level disabled by default.
+
+Test gate:
+
+- Unit test database create/read/update flows.
+- Unit test migrations.
+- Unit test profile import/export validation.
+- Unit test log export as JSON and CSV.
+- Unit test log retention and pruning.
+- Unit test repeated-event rate limiting.
+- Verify seeded profiles appear in UI.
+
+Exit criteria:
+
+- Profiles and logs persist across app restarts, logs are pruned safely, and exports work before pruning.
+
+### Phase 5: Rules Engine
+
+Status: Planned
+
+Objective:
+
+- Evaluate triggers and manage workload sessions.
+
+Tasks:
+
+- Implement adaptive monitoring loop.
+- Implement idle, watched-app, and active-session polling states.
+- Implement monitoring self-overhead instrumentation for development/testing.
+- Implement a metrics source abstraction so profile-specific bottleneck monitors can be added without rewriting the rules engine.
+- Implement trigger evaluation.
+- Implement threshold duration tracking.
+- Implement burst-aware activity tracking for Studio Mode.
+- Keep Studio Mode primarily DAW/manual-triggered; burst detection is supporting evidence only.
+- Implement hang/stall alert detection for approved local AI/dev processes.
+- Implement manual CLI/UI triggers.
+- Implement `status --agent` output using a stable minimal JSON contract.
+- Implement Safe Mode startup path that disables automation before profiles/scripts/actions can run.
+- Implement profile activation.
+- Implement profile deactivation.
+- Implement session lifecycle.
+- Implement action ordering.
+- Implement action failure handling.
+- Implement snapshot-before-action requirement.
+- Implement restore lifecycle.
+- Implement startup reconciliation for stale sessions.
+- Implement conflict handling for simultaneous profiles.
+
+Test gate:
+
+- Unit tests for trigger matching.
+- Unit tests for threshold duration.
+- Unit tests for burst-aware Studio Mode behavior.
+- Unit tests for manual CLI/UI activation.
+- Unit tests for Safe Mode blocking automatic activation.
+- Unit tests for agent status JSON shape.
+- Unit tests for activation/deactivation.
+- Unit tests for restore lifecycle.
+- Unit tests for stale session recovery.
+- Unit tests for adaptive polling state transitions.
+- Unit tests for top offender selection.
+- Unit tests for hang/stall alert thresholds.
+- Unit tests for conflict tie-breakers.
+
+Exit criteria:
+
+- Engine works with mock Windows adapter.
+
+### Phase 6: Windows Adapter
+
+Status: Planned
+
+Objective:
+
+- Implement native Windows controls for the v1 MVP.
+
+Tasks:
+
+- Detect running processes/apps.
+- Read CPU and RAM usage.
+- Read battery status and AC power source.
+- Detect Windows power capabilities, including Modern Standby/OEM-restricted power-plan behavior.
+- Prevent sleep during active sessions with non-persistent execution-state/power APIs.
+- Detect Battery Saver or policy states that may override sleep-prevention requests and warn the user.
+- Inspect current power plan.
+- Switch to approved power plan where configured.
+- Return unsupported-capability results instead of failing silently when power-plan switching is unavailable.
+- Restore previous power plan after session end.
+- Implement best-effort interruption-reduction action where safely supported; direct Focus control is not guaranteed.
+- Do not use UI automation or undocumented registry hacks for Focus/notification control.
+- Implement user-approved background app pause/quit.
+- Implement user-approved cloud-sync pause/quit presets.
+- Implement approved PowerShell/script execution only for approved scripts.
+- Return structured errors for unsupported or permission-blocked actions.
+
+Test gate:
+
+- Manual process detection test on Windows.
+- Manual CPU/RAM status test on Windows.
+- Manual sleep prevention test on Windows.
+- Manual force-quit cleanup behavior test for sleep prevention.
+- Manual power plan switch and restore test on Windows.
+- Manual unavailable/hidden power-plan fallback test on a Modern Standby or OEM-restricted Windows device.
+- Manual stale session recovery test after relaunch/reboot.
+- Manual unsupported-action error test.
+
+Exit criteria:
+
+- Windows adapter supports the core v1 lifecycle safely.
+
+### Phase 7: CLI + Log/Profile Export
+
+Status: Planned
+
+Objective:
+
+- Support developer workflows, beta debugging, and profile sharing.
+
+Tasks:
+
+- Implement `ozvil status`.
+- Implement `ozvil profiles list`.
+- Implement `ozvil start <profile-id-or-name>`.
+- Implement `ozvil dry-run <profile-id-or-name>`.
+- Implement `ozvil stop`.
+- Implement `ozvil restore`.
+- Implement `ozvil logs export --format json`.
+- Implement `ozvil logs export --format csv`.
+- Implement `ozvil profile export <profile-id-or-name>`.
+- Implement `ozvil profile import <path>`.
+- Implement approved profile start script execution.
+- Implement approved profile restore script execution.
+- Implement script timeout/failure logging.
+- Ensure CLI and UI share the same core services.
+
+Test gate:
+
+- CLI integration tests against mock Windows adapter.
+- Log export tests for JSON and CSV.
+- Profile import/export round-trip tests.
+- Approved start/restore script dry-run and failure tests.
+
+Exit criteria:
+
+- CLI can control profiles, run approved scripts, export beta-support artifacts, and serve hardware integrations through command execution.
+
+### Phase 8: Trust UI
+
+Status: Planned
+
+Objective:
+
+- Build the visible trust layer that shows users Ozvil is working.
+
+Tasks:
+
+- Build dashboard active profile state.
+- Build live Windows system status panel.
+- Build RAM pressure and CPU pressure warnings.
+- Build before/after changes view.
+- Build profile editor.
+- Build dry-run preview.
+- Build activity log.
+- Build JSON/CSV log export UI.
+- Build profile import/export UI.
+- Build log retention settings.
+- Build manual interruption checklist for Recording Mode and Game Mode Plus.
+- Build restore center.
+- Build stale session recovery prompt.
+- Build global pause control.
+- Build settings and permissions view.
+- Build clear empty/error states.
+
+Test gate:
+
+- UI smoke test for dashboard.
+- UI smoke test for profile editing.
+- UI smoke test for dry run.
+- UI smoke test for activity log.
+- UI smoke test for log export.
+- UI smoke test for profile import/export.
+- UI smoke test for log retention settings.
+- UI smoke test for manual interruption checklist.
+- UI smoke test for restore.
+- UI tests with mocked active, failed-action, high-RAM, stale-session, and global-pause states.
+
+Exit criteria:
+
+- A user can understand what Ozvil changed, why, and how to undo it.
+
+### Phase 9: End-to-End Windows MVP
+
+Status: Planned
+
+Objective:
+
+- Validate Ozvil as a usable Windows MVP.
+
+Tasks:
+
+- Test with mock heavy process.
+- Test with installed heavy apps where available.
+- Test manual CLI profile start/stop.
+- Test manual UI profile start/stop.
+- Test automatic activation.
+- Test dry-run activation.
+- Test restore after app quit.
+- Test restore after app crash/forced quit.
+- Test restore after Ozvil crash/force-quit.
+- Test restore after Windows reboot where applicable.
+- Test global pause.
+- Test action failure visibility.
+- Test log export after failure.
+- Update Plan.md with results and remaining risks.
+
+Test gate:
+
+- Windows acceptance scenarios pass.
+
+Exit criteria:
+
+- Windows MVP is ready for limited internal use.
+
+### Phase 10: Packaging And Beta Readiness
+
+Status: Planned
+
+Objective:
+
+- Prepare a controlled Windows beta.
+
+Tasks:
+
+- Configure Windows installer.
+- Configure dedicated Start Menu shortcut named `Ozvil (Safe Mode)`.
+- Document Windows signing requirements.
+- Configure Tauri updater artifacts after release hosting is chosen.
+- Add versioning policy.
+- Add release checklist.
+- Define beta tester profile.
+- Create onboarding checklist.
+- Create feedback questions.
+- Create known limitations list.
+- Decide telemetry policy explicitly.
+- Add crash/log export flow if telemetry remains absent.
+- Create support/debug instructions.
+
+Test gate:
+
+- Build Windows installer/package.
+- Install and launch packaged app on Windows.
+- Confirm `Ozvil (Safe Mode)` shortcut launches with automation disabled.
+- Run beta checklist on at least one Windows machine.
+
+Exit criteria:
+
+- Ozvil is ready for external Windows beta testers.
+
+## Testing Framework
+
+Rust:
+
+- `cargo test` for unit tests.
+- Tauri mock runtime for integration tests where applicable.
+- Mock Windows adapter for deterministic rules engine tests.
+- Fixture-based system-state tests for CPU/RAM/battery/process scenarios.
+- Fixture-based power capability tests for Modern Standby, missing power plans, and OEM-restricted devices.
+- Fixture-based profile bottleneck tests for render, build, design, game, studio, and recording scenarios.
+- Monitoring overhead tests that assert idle and active sampling stay within the documented resource budget.
+
+Black-box scenario testing:
+
+- Pytest is the primary orchestration framework for compiled CLI scenario tests.
+- Pytest drives simulated Windows adapter fixtures and validates Ozvil's decisions without touching real OS state.
+- Fixture scenarios must cover CPU/RAM pressure, rapid active/idle toggles, Modern Standby limitations, Global Pause, Safe Mode, local AI stalls, and profile-specific bottleneck warnings.
+- Rust unit tests remain the source of truth for internal state-machine logic.
+
+Frontend:
+
+- Vitest for TypeScript logic.
+- React Testing Library for component behavior.
+- Playwright for smoke and stateful UI flows.
+- Mocked system-state scenarios for complex Trust Layer states.
+
+Database:
+
+- SQLite test database per test.
+- Migration tests.
+- Seed data tests.
+- Profile import/export tests.
+- Log export JSON/CSV tests.
+- Log retention/pruning tests.
+- Repeated-event rate limiting tests.
+- Maximum database size behavior tests.
+
+CLI:
+
+- CLI integration tests against mock Windows adapter.
+- CLI simulation tests against JSON Windows adapter fixtures.
+- CLI exit-code tests.
+- CLI output snapshot tests where stable.
+- Approved start/restore script tests with dry-run, timeout, and failure fixtures.
+- Hardware integration smoke tests through command execution, not local webhooks.
+
+Manual Windows acceptance:
+
+- Required because sleep prevention, power plans, process management, and interruption reduction are OS-dependent.
+- Manual tests are final confidence checks, not the main regression suite.
+
+## Test Cases And Scenarios
+
+### Rules Engine Tests
+
+- App trigger activates matching profile.
+- Process trigger activates matching profile.
+- CPU threshold requires configured duration.
+- Memory threshold requires configured duration.
+- Burst-aware Studio Mode can activate from short spike history or manual start.
+- Adaptive polling slows down when idle and speeds up when watched apps or active sessions exist.
+- Monitoring avoids expensive full-system metric collection in tight loops.
+- Profile-specific bottleneck fixtures produce the intended warnings/actions for each built-in mode.
+- Top offender list selects the highest CPU/RAM background contributors.
+- Approved local AI/dev process stall detection alerts after configured near-zero CPU duration.
+- Disabled profile never activates.
+- Manual CLI activation overrides automatic activation.
+- Manual UI activation overrides automatic activation.
+- Active manual profile is not replaced by an automatic profile; the automatic match is logged or suggested.
+- Recording and Studio modes beat other automatic profiles when interruption risk is higher.
+- Foreground app profile beats background app profile where foreground detection is available.
+- Current active profile is preserved when all tie-breakers are equal.
+- Suppressed profile is logged.
+- Session ends on app quit.
+- Session ends on resource idle.
+- Manual session requires manual stop.
+- Global Pause suppresses new automatic activations.
+- Emergency restore can run while Global Pause is active.
+- Manual activation during Global Pause requires explicit confirmation.
+- Safe Mode suppresses automatic activation, scripts, app pauses, and power actions.
+- `status --agent` returns stable minimal JSON for terminal agents.
+
+### Restore Tests
+
+- Snapshot is recorded before actions run.
+- Successful actions are restored.
+- Failed actions are logged but do not prevent restoring successful actions.
+- Restore can be triggered manually.
+- Restore is idempotent.
+- Restore after target app crash still attempts previous-state recovery.
+- Restore after Ozvil crash or force-quit is offered on next launch through stale session reconciliation.
+- Non-persistent sleep prevention releases naturally if Ozvil exits unexpectedly.
+- Previous Windows power plan is restored after session end.
+- Unsupported or unavailable power-plan action records a safe unsupported-capability result.
+
+### Windows Manual Scenarios
+
+- Launch a configured app and confirm profile activation.
+- Confirm sleep prevention starts during active session.
+- Force-quit Ozvil during sleep prevention and confirm no permanent sleep setting remains.
+- Relaunch Ozvil after an unclean exit and confirm stale session restore prompt.
+- Enable Battery Saver or equivalent policy and confirm Ozvil warns that sleep prevention may be overridden.
+- Switch power plan and confirm restore.
+- On a Modern Standby/OEM-restricted device, confirm unavailable power-plan switching fails visibly and safely.
+- Confirm RAM/CPU/battery status readings.
+- Confirm real-time top offender list identifies the top background CPU/RAM contributors.
+- Confirm no UI automation or registry hack is used for Focus/notification behavior.
+- Confirm activity log records every action.
+- Close app and confirm restore.
+- Run dry-run and confirm no system changes are applied.
+- Turn on global pause and confirm automation does not run.
+- Pause a user-approved cloud-sync/background app and confirm restore behavior.
+- Trigger unsupported action and confirm clear error.
+
+### CLI Tests
+
+- `ozvil status` returns current mode and system state summary.
+- `ozvil status --agent` returns stable minimal JSON with mode, pressure, CPU, RAM, battery, and recommendation fields.
+- `ozvil --safe-mode` starts with automation disabled.
+- `ozvil safe-start` starts with automation disabled.
+- `ozvil profiles list` returns available profiles.
+- `ozvil start build` activates Build Mode through shared core.
+- `ozvil dry-run render` shows intended actions without applying them.
+- `ozvil stop` ends active manual session.
+- `ozvil restore` attempts restore from active/stale snapshot.
+- `ozvil logs export --format json` writes valid JSON.
+- `ozvil logs export --format csv` writes valid CSV.
+- `ozvil profile export` writes validated JSON.
+- `ozvil profile import` rejects invalid profile JSON.
+- Approved profile start script runs only after explicit approval and logs failures.
+- Approved profile restore script runs in restore phase with timeout handling.
+
+### UI Smoke Tests
+
+- Dashboard renders idle state.
+- Dashboard renders active mode.
+- Dashboard renders high CPU/RAM/battery warning states from mocked system data.
+- Profile editor creates profile.
+- Profile editor edits profile.
+- Dry-run preview shows intended changes.
+- Activity log shows action failure with reason.
+- Activity log filters by session.
+- Log export UI exports JSON/CSV.
+- Activity logs are rate-limited/pruned according to retention policy.
+- Profile import/export UI round-trips valid profile JSON.
+- Manual interruption checklist appears when Focus/interruption reduction is unavailable.
+- Restore center shows active snapshot.
+- Restore center shows stale session recovery after mocked Ozvil crash.
+- Dashboard shows real-time top offender list from mocked CPU/RAM pressure data.
+- Dashboard shows unsupported power-plan action with a clear reason.
+- Global pause toggles state.
+
+## Acceptance Criteria
+
+Ozvil Windows v1 is successful when:
+
+- A user can install and open the Windows app.
+- A user can choose a built-in profile.
+- A user can run dry-run mode.
+- A heavy app/process can activate a profile.
+- CLI can start, stop, dry-run, restore, and export logs.
+- CLI commands are sufficient for macro pads and Stream Deck-style hardware mapping in v1.
+- Ozvil can prevent sleep during a session.
+- Ozvil warns when Battery Saver/OEM policy may override sleep prevention.
+- Ozvil can inspect and restore Windows power plan state when that action is configured.
+- Ozvil can detect unavailable power-plan capabilities and degrade safely on Modern Standby/OEM-restricted devices.
+- Ozvil can monitor CPU, RAM, battery, and AC power.
+- Ozvil can warn about high RAM pressure without claiming fake RAM allocation.
+- Ozvil can show the top CPU/RAM offender list during pressure events.
+- Ozvil can alert on approved local AI/dev process stalls without restarting automatically.
+- Ozvil can expose `status --agent` for terminal AI agents and scripts.
+- Ozvil can launch in Safe Mode with automation disabled so corrupt profiles cannot crash-loop actions.
+- The Windows installer creates `Ozvil (Safe Mode)` as a dedicated Start Menu shortcut.
+- Ozvil shows manual interruption checklist fallback when Windows interruption reduction is unavailable.
+- Ozvil applies profile-specific bottleneck rules at least as documented v1 warnings or future-capability placeholders.
+- Ozvil can log all attempted actions.
+- Ozvil can export logs as JSON/CSV.
+- Ozvil can prune activity logs according to retention policy without losing recent session evidence.
+- Ozvil can import/export profiles as JSON.
+- Ozvil can run approved start/restore scripts with timeout and failure logging.
+- Ozvil can restore previous state after session end.
+- Ozvil can detect and recover from an unfinished session after Ozvil restarts.
+- A user can manually stop and restore a session.
+- A user can globally pause automation.
+- Unsupported actions fail visibly and safely.
+- Global Pause blocks automatic activations while still allowing emergency restore.
+- Ozvil stays within a documented low-overhead monitoring budget during idle operation.
+- Ozvil avoids WMI-heavy or otherwise expensive metric polling in tight loops.
+- Windows MVP passes all required acceptance scenarios before beta.
+
+## Security And Safety Principles
+
+- No hidden system mutations.
+- No background app control without explicit approval.
+- No arbitrary script execution without explicit approval.
+- No approved script runs without dry-run visibility, timeout handling, and activity logging.
+- No storing secrets in plain text.
+- No default telemetry.
+- No destructive system commands.
+- No registry cleaning.
+- No undocumented registry hacks for notification/Focus control.
+- No UI automation for notification/Focus control in v1.
+- No kernel drivers in v1.
+- No virtual audio drivers in v1 or v1.1.
+- No local webhook/control server in v1.
+- Prefer non-persistent OS controls over persistent system setting changes.
+- Sleep prevention should use non-persistent Windows execution-state/power APIs where available.
+- Sleep prevention is treated as requested/monitored, not guaranteed, because Battery Saver/OEM policies can override it.
+- Power-plan switching must be capability-detected because Modern Standby/OEM devices may hide or disable traditional plans.
+- Ozvil must reconcile stale sessions on startup after crash, force-quit, or reboot.
+- Direct Windows Focus/notification control is best-effort only and must fail visibly if unsupported.
+- Application-specific bottleneck processing is a long-term design rule; generic CPU/RAM monitoring is not enough for the product vision.
+- ASIO/WASAPI audio activity detection is research-only until proven feasible without driver-level components.
+- Safe Mode must disable automation before any profile, script, app pause, or power action can run.
+- The dedicated `Ozvil (Safe Mode)` shortcut is the primary GUI safety hatch; Shift startup is only best-effort.
+- Activity logs must be retained, rate-limited, and pruned so SQLite cannot grow unbounded.
+- VRAM/GPU monitoring must remain experimental until reliable low-overhead vendor-neutral behavior is validated.
+- Every privileged action must have a clear user-facing reason.
+- Every applied action must have a restore path or a clear reason why restore is not possible.
+- Network/domain blocking is deferred until it has a reliable permissions, restore, and support story.
+- Automatic process restart is deferred unless explicitly configured by the user as a recovery command.
+- Process priority tuning is deferred to an advanced, explicit-approval feature and must never use High or Realtime by default.
+
+## Decision Log
+
+| Date | Decision | Reason |
+|---|---|---|
+| 2026-05-02 | Product name is Ozvil | User provided name during planning |
+| 2026-05-02 | Use Tauri + Rust | Lightweight, credible for a system utility, strong native adapter model |
+| 2026-05-02 | Target creators + developers in v1 | Broad enough for the vision, narrow enough for MVP |
+| 2026-05-02 | V1 scope is Safe System Modes | Builds trust and avoids suspicious optimizer behavior |
+| 2026-05-02 | Background app control is user-approved only | Reduces data-loss and trust risk |
+| 2026-05-02 | Plan.md is source of truth | User requested meticulous planning before execution |
+| 2026-05-02 | Ozvil must support stale session recovery | Prevents the system from remaining altered after Ozvil crashes |
+| 2026-05-02 | Monitoring must be adaptive and low overhead | Avoids Ozvil becoming the background drain it is meant to prevent |
+| 2026-05-02 | Network blocking and automatic restart are deferred | Both are useful but risky without explicit restore and permission design |
+| 2026-05-02 | Pivot to Windows-only v1 | Windows has clearer pain around background load, power plans, RAM pressure, and heavy-app workflows |
+| 2026-05-02 | macOS support is deferred | macOS has more built-in and third-party automation coverage, so it is not the best first market |
+| 2026-05-02 | Add CLI to v1 | Developers and power users need terminal control and it improves testability |
+| 2026-05-02 | Add JSON/CSV log export to v1 | Beta testers need an easy way to send actionable failure data |
+| 2026-05-02 | Add Windows power capability detection | Modern Standby and OEM restrictions can make classic power plans unavailable |
+| 2026-05-02 | Treat interruption reduction as best-effort | Windows Focus/notification controls are limited for third-party apps |
+| 2026-05-02 | Manual sessions are sticky | User intent should not be overridden by automatic profile detection |
+| 2026-05-02 | Add top offender list to v1 | Users need actionable context during CPU/RAM pressure events |
+| 2026-05-02 | Add hang/stall alerts, not automatic restarts | Alerts are useful for local AI/dev workflows without risking data loss |
+| 2026-05-02 | Add application-specific processing rule | Each workload category has different real bottlenecks, so Ozvil must evolve beyond generic CPU/RAM thresholds |
+| 2026-05-02 | No Focus UI automation or registry hacks | These approaches are brittle and likely to break across Windows updates |
+| 2026-05-02 | Treat sleep prevention as requested/monitored | Battery Saver and OEM policies can override standard Windows sleep-prevention APIs |
+| 2026-05-02 | Global Pause has explicit precedence | Pause must reliably suppress automation while preserving emergency restore |
+| 2026-05-02 | Make Pytest primary for black-box CLI scenario tests | Simulated Windows adapter fixtures reduce manual testing burden for complex state combinations |
+| 2026-05-02 | Add `status --agent` CLI output | Terminal-based AI agents and scripts need a stable minimal machine-readable system pressure signal |
+| 2026-05-02 | Add Safe Mode startup | Users need a safety hatch for corrupt profiles, crash loops, and bad scripts |
+| 2026-05-02 | ASIO detection is research-only | WASAPI may not expose pro DAW ASIO streams and virtual audio drivers are out of scope |
+| 2026-05-02 | Add Design Mode local AI image generation support | Modern design workflows can use browser UIs backed by local GPU/VRAM-heavy model processes |
+| 2026-05-02 | Add log retention and pruning | Activity logs must not cause SQLite bloat or degrade performance |
+| 2026-05-02 | Add dedicated Safe Mode shortcut | Holding Shift during startup is best-effort, while a Start Menu shortcut is reliable |
+| 2026-05-02 | Keep VRAM/GPU monitoring experimental | Accurate low-overhead VRAM metrics vary across GPU vendors and local AI backends |
+| 2026-05-02 | Add manual interruption checklist | Best-effort Focus support needs a user-visible fallback for recording and gaming workflows |
+| 2026-05-02 | Add approved start/restore scripts | Profile scripts are useful when explicit, visible, timed, logged, and reversible |
+| 2026-05-02 | Use CLI for v1 hardware hooks | Macro pads and Stream Deck-style tools can call CLI commands without adding a local server |
+
+## Execution Log
+
+| Date | Phase | Status | Notes |
+|---|---|---|---|
+| 2026-05-02 | 0. Windows Plan Pivot | Completed | Rewrote Plan.md for Windows-only v1 |
+
+## Assumptions And Defaults
+
+- Repository starts at `/Users/macz/Documents/BG_DAEMON`.
+- `Plan.md` stays in the repository root.
+- Windows is the only v1 target platform.
+- macOS support is future expansion only.
+- The app should work without cloud services in v1.
+- Telemetry is not included by default.
+- First-run activation mode is `ask_first`.
+- Automatic mode can be enabled by the user after successful runs.
+- User-approved app control is allowed; automatic app killing is not.
+- Unsupported Windows actions should degrade gracefully.
+- Testing should combine automated unit/integration tests with manual Windows acceptance tests.
+- Pytest is the primary black-box scenario framework for compiled CLI tests with simulated Windows adapter fixtures.
+- Manual Windows testing requires either a physical Windows machine or a Windows VM.
+- Sleep prevention should be non-persistent whenever Windows provides process-scoped mechanisms.
+- Battery Saver/OEM power policy may override sleep prevention, so Ozvil must warn rather than guarantee.
+- Power-plan actions are optional capabilities and may be unavailable on Modern Standby/OEM-restricted Windows devices.
+- Interruption reduction is best-effort and must not silently pretend to control Windows Focus if unsupported.
+- Focus/notification behavior must not use UI automation or undocumented registry hacks.
+- Manual CLI/UI sessions are sticky until the user stops or switches them.
+- Global Pause blocks new automatic activations; emergency restore remains available.
+- On startup, Ozvil checks for unfinished sessions and reconciles restore state before activating new profiles.
+- Profile import/export uses validated JSON files.
+- Log export supports JSON and CSV.
+- Activity logs are rate-limited and pruned according to retention policy.
+- `status --agent` returns stable minimal JSON for terminal agents and scripts.
+- Safe Mode startup disables all automation before profiles/scripts/actions run.
+- The Windows installer creates `Ozvil (Safe Mode)` as the primary Safe Mode GUI path.
+- Approved start/restore scripts require explicit approval, dry-run visibility, timeouts, and activity logging.
+- Macro pads and Stream Deck-style hardware integrations use CLI commands in v1.
+- Local webhook/control server integration is deferred until authentication and local-only security are designed.
+- VRAM/GPU metrics remain experimental until low-overhead reliable measurement is validated.
+- RAM-related messaging must focus on pressure, warnings, and user-approved background app control, not fake memory allocation.
+- Studio Mode relies on DAW/manual activation first; millisecond audio spike detection is not promised in v1.
+- ASIO stream detection is research-only unless proven feasible without virtual audio drivers.
+- Design Mode includes local AI image generation backends when detected behind browser UIs.
+- Future versions must preserve the application-specific processing rule for render, build, design, game, studio, and recording workloads.
