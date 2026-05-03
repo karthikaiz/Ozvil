@@ -2,18 +2,18 @@ use crate::db::models::ActionResult;
 use anyhow::Result;
 
 /// Suspend (pause) a user-approved process by name.
-/// Uses NtSuspendProcess on Windows. Non-Windows builds return an unsupported result.
+/// Suspends every thread of the target process via OpenThread + SuspendThread.
+/// Non-Windows builds return an unsupported result.
 #[cfg(target_os = "windows")]
 pub fn pause_app(app_id: &str) -> Result<ActionResult> {
     use windows::Win32::System::Threading::{
-        OpenProcess, PROCESS_SUSPEND_RESUME, SuspendThread,
+        OpenThread, THREAD_SUSPEND_RESUME, SuspendThread,
     };
     use windows::Win32::System::Diagnostics::ToolHelp::{
         CreateToolhelp32Snapshot, Thread32First, Thread32Next, THREADENTRY32, TH32CS_SNAPTHREAD,
     };
     use windows::Win32::Foundation::CloseHandle;
 
-    // Find the process PID by name first
     let processes = super::process_provider::list_processes()?;
     let target = processes
         .iter()
@@ -28,7 +28,6 @@ pub fn pause_app(app_id: &str) -> Result<ActionResult> {
         }
     };
 
-    // Suspend all threads of the process
     unsafe {
         let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0)?;
         let mut entry = THREADENTRY32 {
@@ -39,7 +38,9 @@ pub fn pause_app(app_id: &str) -> Result<ActionResult> {
         if Thread32First(snapshot, &mut entry).is_ok() {
             loop {
                 if entry.th32OwnerProcessID == pid {
-                    if let Ok(thread_handle) = OpenProcess(PROCESS_SUSPEND_RESUME, false, entry.th32ThreadID) {
+                    if let Ok(thread_handle) =
+                        OpenThread(THREAD_SUSPEND_RESUME, false, entry.th32ThreadID)
+                    {
                         let _ = SuspendThread(thread_handle);
                         let _ = CloseHandle(thread_handle);
                     }
@@ -57,7 +58,7 @@ pub fn pause_app(app_id: &str) -> Result<ActionResult> {
 
 #[cfg(target_os = "windows")]
 pub fn resume_app(app_id: &str) -> Result<ActionResult> {
-    use windows::Win32::System::Threading::{OpenProcess, PROCESS_SUSPEND_RESUME, ResumeThread};
+    use windows::Win32::System::Threading::{OpenThread, THREAD_SUSPEND_RESUME, ResumeThread};
     use windows::Win32::System::Diagnostics::ToolHelp::{
         CreateToolhelp32Snapshot, Thread32First, Thread32Next, THREADENTRY32, TH32CS_SNAPTHREAD,
     };
@@ -83,7 +84,9 @@ pub fn resume_app(app_id: &str) -> Result<ActionResult> {
         if Thread32First(snapshot, &mut entry).is_ok() {
             loop {
                 if entry.th32OwnerProcessID == pid {
-                    if let Ok(thread_handle) = OpenProcess(PROCESS_SUSPEND_RESUME, false, entry.th32ThreadID) {
+                    if let Ok(thread_handle) =
+                        OpenThread(THREAD_SUSPEND_RESUME, false, entry.th32ThreadID)
+                    {
                         let _ = ResumeThread(thread_handle);
                         let _ = CloseHandle(thread_handle);
                     }

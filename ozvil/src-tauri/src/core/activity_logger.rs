@@ -21,7 +21,6 @@ impl ActivityLogger {
     }
 
     pub fn log(&self, entry: ActivityLog) -> Result<()> {
-        // Rate limiting
         {
             let mut guard = self.log_count_this_minute.lock();
             let now = Utc::now();
@@ -63,17 +62,6 @@ impl ActivityLogger {
         limit: usize,
     ) -> Result<Vec<ActivityLog>> {
         let conn = self.db.conn.lock();
-        let sql = if session_id.is_some() {
-            "SELECT id, session_id, profile_id, event_type, action_kind, trigger_kind,
-              result, failure_reason, restore_status, metadata, created_at
-             FROM activity_logs WHERE session_id = ?1 ORDER BY created_at DESC LIMIT ?2"
-        } else {
-            "SELECT id, session_id, profile_id, event_type, action_kind, trigger_kind,
-              result, failure_reason, restore_status, metadata, created_at
-             FROM activity_logs ORDER BY created_at DESC LIMIT ?2"
-        };
-
-        let mut stmt = conn.prepare(sql)?;
 
         let parse = |row: &rusqlite::Row| -> rusqlite::Result<ActivityLog> {
             Ok(ActivityLog {
@@ -98,33 +86,23 @@ impl ActivityLogger {
         };
 
         let rows = if let Some(sid) = session_id {
+            let mut stmt = conn.prepare(
+                "SELECT id, session_id, profile_id, event_type, action_kind, trigger_kind,
+                  result, failure_reason, restore_status, metadata, created_at
+                 FROM activity_logs WHERE session_id = ?1 ORDER BY created_at DESC LIMIT ?2",
+            )?;
             stmt.query_map(params![sid, limit], parse)?
                 .filter_map(|r| r.ok())
                 .collect()
         } else {
-            stmt.query_map(params![rusqlite::types::Null, limit], |row| {
-                Ok(ActivityLog {
-                    id: row.get(0)?,
-                    session_id: row.get(1)?,
-                    profile_id: row.get(2)?,
-                    event_type: serde_json::from_str(&row.get::<_, String>(3)?)
-                        .unwrap_or(crate::db::models::EventType::ActionApplied),
-                    action_kind: row.get(4)?,
-                    trigger_kind: row.get(5)?,
-                    result: row.get(6)?,
-                    failure_reason: row.get(7)?,
-                    restore_status: row.get(8)?,
-                    metadata: row
-                        .get::<_, Option<String>>(9)?
-                        .and_then(|s| serde_json::from_str(&s).ok()),
-                    created_at: row
-                        .get::<_, String>(10)?
-                        .parse()
-                        .unwrap_or_else(|_| Utc::now()),
-                })
-            })?
-            .filter_map(|r| r.ok())
-            .collect()
+            let mut stmt = conn.prepare(
+                "SELECT id, session_id, profile_id, event_type, action_kind, trigger_kind,
+                  result, failure_reason, restore_status, metadata, created_at
+                 FROM activity_logs ORDER BY created_at DESC LIMIT ?1",
+            )?;
+            stmt.query_map(params![limit], parse)?
+                .filter_map(|r| r.ok())
+                .collect()
         };
 
         Ok(rows)

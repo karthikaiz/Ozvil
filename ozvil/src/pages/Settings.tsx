@@ -11,7 +11,10 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    if (settings) setDraft({ ...settings });
+    // Only initialize draft from context on first load (when draft is null).
+    // Subsequent context updates (e.g. toggleGlobalPause refreshing settings)
+    // must not overwrite pending edits the user hasn't saved yet.
+    if (settings && !draft) setDraft({ ...settings });
   }, [settings]);
 
   const handleSave = async () => {

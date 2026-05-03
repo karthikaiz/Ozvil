@@ -30,25 +30,26 @@ pub fn evaluate_triggers(
         return vec![];
     }
 
+    // Only manual sessions are sticky — automatic sessions can be superseded by a
+    // higher-priority trigger or replaced when their trigger condition goes away.
+    if let Some(active) = active_session {
+        let is_manual = matches!(
+            active.trigger_source,
+            TriggerSource::ManualCli | TriggerSource::ManualUi
+        );
+        if is_manual {
+            return vec![];
+        }
+    }
+
+    if global_pause {
+        return vec![];
+    }
+
     let mut matches: Vec<TriggerMatch> = vec![];
 
     for profile in profiles {
         if !profile.enabled {
-            continue;
-        }
-
-        // Manual sessions are sticky — automatic profiles cannot replace them
-        if let Some(active) = active_session {
-            let is_manual = matches!(
-                active.status,
-                SessionStatus::Active
-            );
-            if is_manual {
-                continue;
-            }
-        }
-
-        if global_pause {
             continue;
         }
 
@@ -66,7 +67,6 @@ pub fn evaluate_triggers(
         }
     }
 
-    // Sort by priority descending
     matches.sort_by(|a, b| b.priority.cmp(&a.priority));
     matches
 }
@@ -137,9 +137,12 @@ pub fn resolve_conflict(
         return None;
     }
 
-    // Active manual session takes precedence
+    // Active manual session takes precedence over all automatic triggers
     if let Some(session) = active_session {
-        if matches!(session.status, SessionStatus::Active) {
+        if matches!(
+            session.trigger_source,
+            TriggerSource::ManualCli | TriggerSource::ManualUi
+        ) && matches!(session.status, SessionStatus::Active) {
             return None;
         }
     }

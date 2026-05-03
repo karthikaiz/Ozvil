@@ -4,22 +4,10 @@ use crate::db::{
     },
     Database,
 };
-use crate::profiles::ProfileRepository;
 use anyhow::Result;
 use chrono::Utc;
-use std::sync::Arc;
 
 pub fn seed_builtin_profiles(db: &Database) -> Result<()> {
-    let repo = ProfileRepository::new(Arc::new(Database::open(
-        &std::path::PathBuf::from(":memory:"),
-    ).unwrap_or_else(|_| {
-        // Fallback: use passed db reference directly via clone
-        // This is a scaffold pattern; real impl passes Arc<Database>
-        panic!("db unavailable for seeding")
-    })));
-
-    // Use direct SQL to seed builtin profiles rather than the repo
-    // so we can reference the real db conn.
     let conn = db.conn.lock();
 
     let profiles = all_builtin_profiles();

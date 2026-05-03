@@ -71,9 +71,9 @@
       }
     },
     "updater": {
-      "active": true,
+      "active": false,
       "dialog": true,
-      "pubkey": "PLACEHOLDER_REPLACE_WITH_OUTPUT_OF_tauri_signer_generate",
+      "pubkey": "",
       "endpoints": [
         "https://update.ozvil.app/{{target}}/{{arch}}/{{current_version}}"
       ],
@@ -85,7 +85,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "PLACEHOLDER_REPLACE_WITH_OUTPUT_OF_tauri_signer_generate",
+      "pubkey": "",
       "endpoints": [
         "https://update.ozvil.app/{{target}}/{{arch}}/{{current_version}}"
       ],

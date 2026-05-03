@@ -8,13 +8,16 @@ use chrono::Utc;
 pub struct SnapshotManager;
 
 impl SnapshotManager {
-    pub fn capture(adapter: &dyn WindowsAdapter, actions: &[Action]) -> Result<SystemSnapshot> {
+    /// Capture the current system state BEFORE actions are applied so that
+    /// restore knows exactly what to revert. `sleep_prevention_active` and
+    /// `paused_apps` reflect the real pre-session state, not an empty default.
+    pub fn capture(adapter: &dyn WindowsAdapter, _actions: &[Action]) -> Result<SystemSnapshot> {
         let status = adapter.read_system_status()?;
 
         let snapshot = SystemSnapshot {
             power_plan_id: status.power_plan_id.clone(),
             power_plan_name: status.power_plan_name.clone(),
-            sleep_prevention_active: false,
+            sleep_prevention_active: status.sleep_prevention_active,
             paused_apps: vec![],
             actions_applied: vec![],
             captured_at: Utc::now(),

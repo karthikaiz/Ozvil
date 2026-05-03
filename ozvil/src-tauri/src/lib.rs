@@ -56,6 +56,7 @@ pub fn run_gui(safe_mode: bool) {
             commands::start_profile,
             commands::stop_session,
             commands::restore_session,
+            commands::restore_stale_session,
             commands::dry_run_profile,
             commands::get_active_session,
             commands::get_sessions,

@@ -30,7 +30,11 @@ export default function RestoreCenter() {
     setRestoreErrors([]);
     setRestoreSuccess(false);
     try {
-      const errors = await invoke<string[]>("restore_session");
+      // Stale sessions have a specific ID and need their own restore command.
+      // Active sessions use restore_session which operates on the current session.
+      const errors = sessionId
+        ? await invoke<string[]>("restore_stale_session", { id: sessionId })
+        : await invoke<string[]>("restore_session");
       setRestoreErrors(errors);
       setRestoreSuccess(errors.length === 0);
       refreshSession();

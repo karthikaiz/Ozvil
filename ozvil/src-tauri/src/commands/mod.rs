@@ -1,12 +1,12 @@
 use crate::core::AppState;
+use crate::core::activity_logger::ActivityLogger;
+use crate::core::session_manager::SessionManager;
+use crate::core::snapshot_manager::SnapshotManager;
 use crate::db::models::*;
 use crate::profiles::ProfileRepository;
-use crate::core::session_manager::SessionManager;
-use crate::core::activity_logger::ActivityLogger;
 use crate::windows_adapter::{WindowsAdapter, WindowsNativeAdapter};
 use chrono::Utc;
-use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use serde::Serialize;
 use tauri::State;
 use uuid::Uuid;
 
@@ -88,6 +88,8 @@ pub async fn start_profile(
         .ok_or_else(|| format!("Profile not found: {}", profile_id))?;
 
     let adapter = WindowsNativeAdapter;
+
+    // Capture pre-session snapshot so restore knows exactly what to revert
     let snapshot = adapter
         .snapshot_state(&profile.actions)
         .map_err(|e| e.to_string())?;
@@ -97,9 +99,20 @@ pub async fn start_profile(
         .start_session(&profile, TriggerSource::ManualUi, snapshot, state.safe_mode)
         .map_err(|e| e.to_string())?;
 
-    // Apply actions (non-dry-run)
-    for action in &profile.actions {
-        let _ = adapter.apply_action(action);
+    // Apply actions and collect results
+    let applied = SnapshotManager::apply_actions(&adapter, &profile.actions, false);
+
+    // Persist updated snapshot with actions_applied populated
+    if let Some(original_snapshot) = &session.snapshot {
+        let mut updated_snapshot = original_snapshot.clone();
+        updated_snapshot.actions_applied = applied;
+        if let Ok(snap_json) = serde_json::to_string(&updated_snapshot) {
+            let conn = state.db.conn.lock();
+            let _ = conn.execute(
+                "UPDATE sessions SET snapshot = ?1 WHERE id = ?2",
+                rusqlite::params![snap_json, session.id],
+            );
+        }
     }
 
     let mut active_id = state.active_session_id.write();
@@ -152,6 +165,38 @@ pub async fn restore_session(state: State<'_, AppState>) -> Result<Vec<String>, 
 
     let mut active_id = state.active_session_id.write();
     *active_id = None;
+
+    let logger = ActivityLogger::new(state.db.clone(), 60);
+    let mut entry = ActivityLogger::make_entry(EventType::SessionRestored);
+    entry.session_id = Some(session.id);
+    let _ = logger.log(entry);
+
+    Ok(errors)
+}
+
+/// Restore system state from a specific stale session by ID, then mark it ended.
+#[tauri::command]
+pub async fn restore_stale_session(
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, String> {
+    let sm = SessionManager::new(state.db.clone());
+    let stale_sessions = sm.get_stale_sessions().map_err(|e| e.to_string())?;
+    let session = stale_sessions
+        .into_iter()
+        .find(|s| s.id == id)
+        .ok_or_else(|| format!("Stale session not found: {}", id))?;
+
+    let mut errors = vec![];
+    if let Some(snapshot) = &session.snapshot {
+        let adapter = WindowsNativeAdapter;
+        match adapter.restore_snapshot(snapshot) {
+            Ok(result) => errors.extend(result.failed),
+            Err(e) => errors.push(e.to_string()),
+        }
+    }
+
+    sm.dismiss_stale_session(&session.id).map_err(|e| e.to_string())?;
 
     let logger = ActivityLogger::new(state.db.clone(), 60);
     let mut entry = ActivityLogger::make_entry(EventType::SessionRestored);
@@ -374,13 +419,17 @@ pub async fn update_settings(settings: Settings, state: State<'_, AppState>) -> 
 
 #[tauri::command]
 pub async fn toggle_global_pause(state: State<'_, AppState>) -> Result<bool, String> {
-    let mut settings = state.settings.write();
-    settings.global_pause = !settings.global_pause;
-    let new_val = settings.global_pause;
-    drop(settings);
+    // Perform the toggle and serialize within the write lock to avoid TOCTOU
+    // between another concurrent toggle and the DB write.
+    let new_val;
+    let json;
+    {
+        let mut settings = state.settings.write();
+        settings.global_pause = !settings.global_pause;
+        new_val = settings.global_pause;
+        json = serde_json::to_string(&*settings).map_err(|e| e.to_string())?;
+    }
 
-    let current = state.settings.read().clone();
-    let json = serde_json::to_string(&current).map_err(|e| e.to_string())?;
     let conn = state.db.conn.lock();
     conn.execute(
         "INSERT INTO settings (key, value) VALUES ('app_settings', ?1)
