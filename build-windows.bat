@@ -86,8 +86,24 @@ if %errorLevel% neq 0 (
     call :refresh_path
 )
 echo       Setting MSVC toolchain as default...
-rustup default stable-msvc >nul 2>&1
-rustup target add x86_64-pc-windows-msvc >nul 2>&1
+rustup default stable-msvc
+if !errorLevel! neq 0 (
+    echo [ERROR] Failed to set stable-msvc as default toolchain.
+    pause & exit /b 1
+)
+echo       Adding x86_64-pc-windows-msvc target...
+rustup target add x86_64-pc-windows-msvc
+if !errorLevel! neq 0 (
+    echo [ERROR] Failed to add x86_64-pc-windows-msvc target.
+    pause & exit /b 1
+)
+echo       Verifying target is installed...
+rustup target list --installed | findstr "x86_64-pc-windows-msvc" >nul 2>&1
+if !errorLevel! neq 0 (
+    echo [ERROR] Target x86_64-pc-windows-msvc still not listed after install.
+    echo         Try running: rustup component add rust-std --target x86_64-pc-windows-msvc
+    pause & exit /b 1
+)
 for /f "tokens=*" %%v in ('rustc --version 2^>nul') do echo       %%v
 
 :: ════════════════════════════════════════════════════════════════
