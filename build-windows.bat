@@ -75,6 +75,14 @@ if exist "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\BuildTools\VC\Tools\M
 :: ════════════════════════════════════════════════════════════════
 echo.
 echo [3/8] Checking Rust (MSVC toolchain)...
+
+:: ── Force correct paths FIRST — Chocolatey shims in ProgramData\chocolatey\bin
+:: ── can shadow the real rustup/cargo in %USERPROFILE%\.cargo\bin.
+:: ── Setting these before any rustup call ensures the right home is used.
+set "RUSTUP_HOME=%USERPROFILE%\.rustup"
+set "CARGO_HOME=%USERPROFILE%\.cargo"
+set "PATH=%USERPROFILE%\.cargo\bin;%PATH%"
+
 where rustup >nul 2>&1
 if %errorLevel% neq 0 (
     echo       Installing Rustup...
@@ -84,39 +92,50 @@ if %errorLevel% neq 0 (
         pause & exit /b 1
     )
     call :refresh_path
+    set "PATH=%USERPROFILE%\.cargo\bin;%PATH%"
 )
+
+echo       RUSTUP_HOME : %RUSTUP_HOME%
+echo       CARGO_HOME  : %CARGO_HOME%
+echo       rustup from :
+where rustup 2>nul
+
 echo       Setting MSVC toolchain as default...
 rustup default stable-msvc
 if !errorLevel! neq 0 (
     echo [ERROR] Failed to set stable-msvc as default toolchain.
     pause & exit /b 1
 )
+
 echo       Adding x86_64-pc-windows-msvc target...
 rustup target add x86_64-pc-windows-msvc
 if !errorLevel! neq 0 (
     echo [ERROR] Failed to add x86_64-pc-windows-msvc target.
     pause & exit /b 1
 )
-echo       Verifying target is installed...
-rustup target list --installed | findstr "x86_64-pc-windows-msvc" >nul 2>&1
-if !errorLevel! neq 0 (
-    echo [ERROR] Target x86_64-pc-windows-msvc still not listed after install.
-    echo         Try running: rustup component add rust-std --target x86_64-pc-windows-msvc
-    pause & exit /b 1
+
+:: ── Verify sysroot files actually exist on disk (registry says installed ──────
+:: ── but files can be missing if the initial download was interrupted)   ──────
+echo       Verifying sysroot files on disk...
+set "_SYSROOT=%RUSTUP_HOME%\toolchains\stable-x86_64-pc-windows-msvc"
+set "_TARGET_LIB=%_SYSROOT%\lib\rustlib\x86_64-pc-windows-msvc\lib"
+
+echo       Sysroot: %_SYSROOT%
+if exist "%_TARGET_LIB%\" (
+    echo       [OK] Target sysroot lib found.
+) else (
+    echo       [WARN] Sysroot lib missing — reinstalling toolchain...
+    rustup toolchain uninstall stable-x86_64-pc-windows-msvc
+    rustup toolchain install stable-x86_64-pc-windows-msvc
+    rustup target add x86_64-pc-windows-msvc
+    if not exist "%_TARGET_LIB%\" (
+        echo [ERROR] Sysroot still missing after reinstall.
+        echo         Expected: %_TARGET_LIB%
+        pause & exit /b 1
+    )
+    echo       [OK] Toolchain reinstalled successfully.
 )
 
-:: ── Pin the Rust environment explicitly so elevated sessions use the ─────────
-:: ── correct user install (avoids RUSTUP_HOME mismatch under UAC) ────────────
-for /f "tokens=*" %%h in ('rustup show home 2^>nul') do set "RUSTUP_HOME=%%h"
-for /f "tokens=*" %%s in ('rustup show active-toolchain 2^>nul') do set "_TC=%%s"
-if not defined RUSTUP_HOME (
-    set "RUSTUP_HOME=%USERPROFILE%\.rustup"
-)
-set "CARGO_HOME=%USERPROFILE%\.cargo"
-set "PATH=%CARGO_HOME%\bin;%PATH%"
-echo       Rust env: RUSTUP_HOME=%RUSTUP_HOME%
-echo       Sysroot :
-for /f "tokens=*" %%s in ('rustc --print sysroot 2^>nul') do echo         %%s
 for /f "tokens=*" %%v in ('rustc --version 2^>nul') do echo       %%v
 
 :: ════════════════════════════════════════════════════════════════
@@ -226,6 +245,10 @@ echo.
 echo [8/8] Building Ozvil...
 echo       Compiling Rust + React. First build takes 5-15 minutes.
 echo.
+
+:: Lock the toolchain so cargo cannot pick a different one
+set "RUSTUP_TOOLCHAIN=stable-x86_64-pc-windows-msvc"
+
 cd /d "%OZVIL_DIR%"
 call node_modules\.bin\tauri build --target x86_64-pc-windows-msvc --bundles nsis
 if %errorLevel% neq 0 (
