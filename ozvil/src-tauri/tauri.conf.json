@@ -35,7 +35,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi"],
+    "targets": ["nsis"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -52,19 +52,9 @@
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
       "timestampUrl": "http://timestamp.digicert.com",
-      "wix": {
-        "language": "en-US",
-        "template": "wix/main.wxs",
-        "fragmentPaths": ["wix/safe_mode_shortcut.wxs"],
-        "componentGroupRefs": ["OzvilSafeModeShortcutGroup"]
-      },
       "nsis": {
-        "template": "nsis/installer.nsi",
-        "installerIcon": "icons/icon.ico",
-        "headerImage": "nsis/header.bmp",
-        "sidebarImage": "nsis/sidebar.bmp",
         "license": "nsis/license.rtf",
-        "installMode": "perMachine",
+        "installMode": "currentUser",
         "languages": ["English"],
         "displayLanguageSelector": false
       }
