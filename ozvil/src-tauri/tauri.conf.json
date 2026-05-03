@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "com.ozvil.app",
   "build": {
-    "beforeDevCommand": "pnpm dev",
+    "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:5173",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -66,20 +66,7 @@
         "license": "nsis/license.rtf",
         "installMode": "perMachine",
         "languages": ["English"],
-        "customNsisFolderPath": "nsis",
         "displayLanguageSelector": false
-      }
-    },
-    "updater": {
-      "active": false,
-      "dialog": true,
-      "pubkey": "",
-      "endpoints": [
-        "https://update.ozvil.app/{{target}}/{{arch}}/{{current_version}}"
-      ],
-      "windows": {
-        "installerArgs": ["/S"],
-        "onInstallMode": "passive"
       }
     }
   },
