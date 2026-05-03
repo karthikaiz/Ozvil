@@ -1,0 +1,144 @@
+name: Deploy Update Server
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ozvil/update-server/worker/**"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        default: "production"
+        type: choice
+        options:
+          - production
+          - staging
+
+# ─── Permissions ──────────────────────────────────────────────────────────────
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  test:
+    name: Test Worker
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install dependencies
+        working-directory: ozvil/update-server/worker
+        run: npm install
+
+      - name: TypeScript typecheck
+        working-directory: ozvil/update-server/worker
+        run: npm run typecheck
+
+      - name: Run tests
+        working-directory: ozvil/update-server/worker
+        run: npm test
+
+  deploy-staging:
+    name: Deploy → Staging
+    needs: test
+    runs-on: ubuntu-latest
+    environment:
+      name: update-server-staging
+      url: https://update-staging.ozvil.app/health
+    if: github.event.inputs.environment == 'staging' || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        working-directory: ozvil/update-server/worker
+        run: npm install
+
+      - name: Deploy to Cloudflare Workers (staging)
+        working-directory: ozvil/update-server/worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy --env staging
+
+      - name: Smoke test staging endpoint
+        run: |
+          sleep 3
+          status=$(curl -s -o /dev/null -w "%{http_code}" \
+            https://update-staging.ozvil.app/health)
+          if [ "$status" = "200" ]; then
+            echo "Staging health check passed (HTTP 200)"
+          else
+            echo "Staging health check FAILED (HTTP $status)"
+            exit 1
+          fi
+
+  deploy-production:
+    name: Deploy → Production
+    needs: test
+    runs-on: ubuntu-latest
+    environment:
+      name: update-server-production
+      url: https://update.ozvil.app/health
+    if: |
+      github.event_name == 'push' ||
+      github.event.inputs.environment == 'production'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        working-directory: ozvil/update-server/worker
+        run: npm install
+
+      - name: Deploy to Cloudflare Workers (production)
+        working-directory: ozvil/update-server/worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy --env production
+
+      - name: Smoke test production endpoint
+        run: |
+          sleep 3
+          # Health check
+          status=$(curl -s -o /dev/null -w "%{http_code}" \
+            https://update.ozvil.app/health)
+          if [ "$status" != "200" ]; then
+            echo "Health check FAILED (HTTP $status)"
+            exit 1
+          fi
+          echo "Health check passed"
+
+          # Update endpoint: very old version should get 200 or 204 (both are valid)
+          status=$(curl -s -o /dev/null -w "%{http_code}" \
+            https://update.ozvil.app/windows/x86_64/0.0.1)
+          if [ "$status" = "200" ] || [ "$status" = "204" ]; then
+            echo "Update endpoint check passed (HTTP $status)"
+          else
+            echo "Update endpoint check FAILED (HTTP $status)"
+            exit 1
+          fi

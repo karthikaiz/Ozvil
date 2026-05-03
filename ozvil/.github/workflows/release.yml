@@ -172,12 +172,13 @@ jobs:
 
       # ── GitHub Release ────────────────────────────────────────────────────────
       - name: Create GitHub Release
+        id: create_release
         if: startsWith(github.ref, 'refs/tags/') || inputs.publish_release == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name || inputs.version }}
           name: Ozvil ${{ github.ref_name || inputs.version }}
-          draft: true
+          draft: false
           prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
           generate_release_notes: true
           files: |
@@ -201,3 +202,87 @@ jobs:
 
             ### What changed
             See [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
+
+      # ── Purge update server cache ─────────────────────────────────────────────
+      # Tells the Cloudflare Worker to drop its KV cache so the new release
+      # is served to users immediately (instead of waiting up to 5 minutes).
+      #
+      # Required secret: UPDATE_SERVER_PURGE_SECRET
+      #   Must match the PURGE_SECRET set in the Worker via `wrangler secret put`.
+      # Optional secret: UPDATE_SERVER_URL
+      #   Defaults to https://update.ozvil.app — override for staging.
+      - name: Purge update server cache
+        if: |
+          (startsWith(github.ref, 'refs/tags/') || inputs.publish_release == 'true') &&
+          !contains(github.ref_name, 'beta') &&
+          !contains(github.ref_name, 'rc') &&
+          secrets.UPDATE_SERVER_PURGE_SECRET != ''
+        env:
+          UPDATE_SERVER_URL: ${{ secrets.UPDATE_SERVER_URL || 'https://update.ozvil.app' }}
+          PURGE_SECRET: ${{ secrets.UPDATE_SERVER_PURGE_SECRET }}
+        run: |
+          $response = Invoke-WebRequest `
+            -Uri "$env:UPDATE_SERVER_URL/admin/purge-cache" `
+            -Method POST `
+            -Headers @{ Authorization = "Bearer $env:PURGE_SECRET" } `
+            -UseBasicParsing
+
+          if ($response.StatusCode -eq 200) {
+            Write-Host "Update server cache purged successfully." -ForegroundColor Green
+          } else {
+            Write-Warning "Cache purge returned HTTP $($response.StatusCode) — update server may serve stale data for up to 5 minutes."
+          }
+        shell: pwsh
+        continue-on-error: true   # non-fatal: users will get the update within 5 min anyway
+
+      # ── Purge for pre-releases (staging update server) ────────────────────────
+      - name: Purge staging update server cache
+        if: |
+          (startsWith(github.ref, 'refs/tags/') || inputs.publish_release == 'true') &&
+          (contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc')) &&
+          secrets.UPDATE_SERVER_STAGING_PURGE_SECRET != ''
+        env:
+          UPDATE_SERVER_URL: ${{ secrets.UPDATE_SERVER_STAGING_URL || 'https://update-staging.ozvil.app' }}
+          PURGE_SECRET: ${{ secrets.UPDATE_SERVER_STAGING_PURGE_SECRET }}
+        run: |
+          $response = Invoke-WebRequest `
+            -Uri "$env:UPDATE_SERVER_URL/admin/purge-cache" `
+            -Method POST `
+            -Headers @{ Authorization = "Bearer $env:PURGE_SECRET" } `
+            -UseBasicParsing
+          Write-Host "Staging cache purge: HTTP $($response.StatusCode)"
+        shell: pwsh
+        continue-on-error: true
+
+      # ── Verify update server sees the new version ─────────────────────────────
+      - name: Verify update endpoint serves new version
+        if: |
+          (startsWith(github.ref, 'refs/tags/') || inputs.publish_release == 'true') &&
+          !contains(github.ref_name, 'beta') &&
+          !contains(github.ref_name, 'rc') &&
+          secrets.UPDATE_SERVER_URL != ''
+        env:
+          UPDATE_SERVER_URL: ${{ secrets.UPDATE_SERVER_URL || 'https://update.ozvil.app' }}
+          TAG: ${{ github.ref_name || inputs.version }}
+        run: |
+          # Give the Worker a moment to propagate the KV purge
+          Start-Sleep -Seconds 3
+
+          # Query with a very old version — should get 200 with the new version
+          $version = $env:TAG -replace '^v', ''
+          $probeVersion = "0.0.1"
+          $url = "$env:UPDATE_SERVER_URL/windows/x86_64/$probeVersion"
+
+          try {
+            $res = Invoke-WebRequest -Uri $url -UseBasicParsing -ErrorAction Stop
+            $body = $res.Content | ConvertFrom-Json
+            if ($body.version -eq $version) {
+              Write-Host "Update endpoint confirmed: serving v$version" -ForegroundColor Green
+            } else {
+              Write-Warning "Update endpoint returned v$($body.version), expected v$version — may still be propagating"
+            }
+          } catch {
+            Write-Warning "Update endpoint check failed: $_ — non-fatal"
+          }
+        shell: pwsh
+        continue-on-error: true

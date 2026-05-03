@@ -1,0 +1,53 @@
+name            = "ozvil-update-server"
+main            = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+# ─── Workers KV — cache for GitHub release data ───────────────────────────────
+[[kv_namespaces]]
+binding  = "CACHE_KV"
+id       = "REPLACE_WITH_KV_NAMESPACE_ID"          # from: wrangler kv namespace create CACHE_KV
+preview_id = "REPLACE_WITH_KV_PREVIEW_NAMESPACE_ID" # from: wrangler kv namespace create CACHE_KV --preview
+
+# ─── Environment variables (non-secret) ──────────────────────────────────────
+[vars]
+GITHUB_OWNER = "REPLACE_WITH_YOUR_GITHUB_ORG_OR_USERNAME"
+GITHUB_REPO  = "ozvil"
+
+# ─── Secrets (set via wrangler CLI — never stored in this file) ───────────────
+# wrangler secret put GITHUB_TOKEN          # optional: GitHub PAT (read-only, raises rate limit)
+# wrangler secret put PURGE_SECRET          # random secret string for /admin/purge-cache
+# wrangler secret put ALLOWED_ORIGINS       # optional: comma-separated CORS origins
+
+# ─── Custom domain ────────────────────────────────────────────────────────────
+# Uncomment and update once your domain is added to Cloudflare.
+# Then update tauri.conf.json to use https://update.ozvil.app/... 
+#
+# [[routes]]
+# pattern = "update.ozvil.app/*"
+# zone_name = "ozvil.app"
+
+# ─── Production environment override ─────────────────────────────────────────
+[env.production]
+name = "ozvil-update-server"
+
+[[env.production.kv_namespaces]]
+binding    = "CACHE_KV"
+id         = "REPLACE_WITH_PRODUCTION_KV_NAMESPACE_ID"
+preview_id = "REPLACE_WITH_PRODUCTION_KV_NAMESPACE_ID"
+
+[env.production.vars]
+GITHUB_OWNER = "REPLACE_WITH_YOUR_GITHUB_ORG_OR_USERNAME"
+GITHUB_REPO  = "ozvil"
+
+# ─── Staging environment ─────────────────────────────────────────────────────
+[env.staging]
+name = "ozvil-update-server-staging"
+
+[[env.staging.kv_namespaces]]
+binding    = "CACHE_KV"
+id         = "REPLACE_WITH_STAGING_KV_NAMESPACE_ID"
+preview_id = "REPLACE_WITH_STAGING_KV_NAMESPACE_ID"
+
+[env.staging.vars]
+GITHUB_OWNER = "REPLACE_WITH_YOUR_GITHUB_ORG_OR_USERNAME"
+GITHUB_REPO  = "ozvil"

@@ -1,67 +1,111 @@
 # Ozvil Update Server
 
-The Tauri updater calls this endpoint to check for new versions:
+The auto-update infrastructure for Ozvil. Handles delivering new versions to
+installed users automatically via the Tauri updater plugin.
+
+## Architecture
 
 ```
-GET https://update.ozvil.app/{target}/{arch}/{current_version}
+┌─────────────────────────────────────────────────────────┐
+│  GitHub Release (*.exe, *.msi, *.sig)                   │
+└─────────────────────────────────────┬───────────────────┘
+                                      │
+                                      │ reads via GitHub API
+                                      ▼
+┌─────────────────────────────────────────────────────────┐
+│  Cloudflare Worker  (update-server/worker/)             │
+│                                                         │
+│  GET /windows/x86_64/{version}                          │
+│    ├── KV cache hit → return JSON/204 instantly         │
+│    └── cache miss  → fetch GitHub → write KV → respond  │
+│                                                         │
+│  POST /admin/purge-cache  ← called by CI after release  │
+└─────────────────────────────────────┬───────────────────┘
+                                      │
+                                      │ Tauri updater poll
+                                      ▼
+┌─────────────────────────────────────────────────────────┐
+│  Ozvil app (user's Windows PC)                          │
+│  tauri-plugin-updater checks on each launch             │
+└─────────────────────────────────────────────────────────┘
 ```
 
-Where:
-- `{target}` — `windows`
-- `{arch}` — `x86_64`
-- `{current_version}` — the installed semver, e.g. `0.1.0`
-
-## Response: no update available
-
-Return **HTTP 204 No Content**.
-
-## Response: update available
-
-Return **HTTP 200** with `Content-Type: application/json` and the body from `update.json.example`.
-
-## Getting the `.sig` file
-
-After running `pnpm tauri build`, Tauri produces `.sig` files alongside each installer:
+## Files
 
 ```
-src-tauri/target/release/bundle/nsis/Ozvil_0.2.0_x64-setup.exe
-src-tauri/target/release/bundle/nsis/Ozvil_0.2.0_x64-setup.exe.sig   ← paste contents here
+update-server/
+├── worker/                 Cloudflare Worker source
+│   ├── src/
+│   │   ├── index.ts        Main request handler + route dispatch
+│   │   ├── release.ts      GitHub release resolver + asset downloader
+│   │   ├── github.ts       GitHub API client (latest/tag release, asset text)
+│   │   ├── cache.ts        Workers KV read/write/purge helpers
+│   │   ├── semver.ts       Minimal semver comparator (no dependencies)
+│   │   ├── types.ts        Shared TypeScript types
+│   │   ├── semver.test.ts  Unit tests — semver comparison (18 cases)
+│   │   └── index.test.ts   Unit tests — all routes (mocked release module)
+│   ├── wrangler.toml       Cloudflare Worker configuration
+│   ├── package.json
+│   ├── tsconfig.json
+│   ├── vitest.config.ts
+│   └── README.md           ← Full setup and deployment guide
+└── update.json.example     Tauri updater response format reference
 ```
 
-The `.sig` file contents (base64) go into `platforms.windows-x86_64.signature`.
+## Quick start
 
-## Minimal update server (Node.js example)
+See **[worker/README.md](worker/README.md)** for the complete setup guide.
 
-```js
-import express from "express";
-import fs from "fs";
+The short version:
 
-const app = express();
+```bash
+cd update-server/worker
+npm install
 
-// Current latest release info
-const LATEST = JSON.parse(fs.readFileSync("latest.json", "utf8"));
+# 1. Create KV namespace
+wrangler kv namespace create CACHE_KV
 
-app.get("/:target/:arch/:version", (req, res) => {
-  const { version } = req.params;
-  const { gt } = await import("semver");
+# 2. Set secrets
+wrangler secret put GITHUB_TOKEN   # optional but recommended
+wrangler secret put PURGE_SECRET   # matches UPDATE_SERVER_PURGE_SECRET in GitHub Actions
 
-  if (!gt(LATEST.version, version)) {
-    return res.status(204).end(); // no update
+# 3. Edit wrangler.toml with your GitHub org/repo and KV namespace IDs
+
+# 4. Deploy
+npm run deploy
+```
+
+## Release pipeline integration
+
+The GitHub Actions release workflow
+(`.github/workflows/release.yml`) automatically:
+
+1. Builds and signs the Tauri installers
+2. Publishes the GitHub Release (with `.exe`, `.msi`, `.sig` assets)
+3. Calls `POST /admin/purge-cache` to invalidate the Worker's KV cache
+4. Verifies the update endpoint returns the new version
+
+**Required secrets in your GitHub repository:**
+
+| Secret | Purpose |
+|---|---|
+| `UPDATE_SERVER_PURGE_SECRET` | Authenticates the cache-purge request |
+| `UPDATE_SERVER_URL` | Optional override (default: `https://update.ozvil.app`) |
+
+## How the Tauri app uses this
+
+`tauri.conf.json`:
+```json
+"plugins": {
+  "updater": {
+    "pubkey": "YOUR_ED25519_PUBLIC_KEY",
+    "endpoints": [
+      "https://update.ozvil.app/{{target}}/{{arch}}/{{current_version}}"
+    ]
   }
-
-  res.json(LATEST);
-});
-
-app.listen(3000);
+}
 ```
 
-## CI: automatic update manifest generation
-
-The GitHub Actions release workflow (`.github/workflows/release.yml`) uploads
-the `.sig` files as release artifacts. After publishing the GitHub Release,
-update `latest.json` on your server with the new version, notes, pub_date,
-and the `.sig` contents.
-
-A future v1.1 improvement: automate update-manifest generation as part of the
-release workflow using a GitHub Actions step that writes `latest.json` to an
-S3 bucket or Cloudflare Worker.
+On every non-Safe-Mode launch, `src-tauri/src/updater.rs` calls the updater
+plugin, which hits this endpoint. If the Worker returns 200, the Tauri dialog
+appears asking the user to update.
