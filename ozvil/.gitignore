@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+src-tauri/target/
+src-tauri/gen/
+
+# Database (local dev)
+*.db
+*.db-wal
+*.db-shm
+
+# Tauri updater keys (keep private!)
+*.key
+*.key.pub
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/settings.json
+.idea/
+
+# Env
+.env
+.env.local

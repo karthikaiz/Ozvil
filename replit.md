@@ -4,6 +4,29 @@
 
 pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
 
+## Ozvil — Windows Desktop App
+
+A full Tauri v2 + Rust + React desktop application lives in `ozvil/`. It is **not part of the monorepo** and is not run here — it is built on a Windows machine using the Tauri toolchain.
+
+See `ozvil/BUILD.md` for full build and development instructions.
+
+### Ozvil Stack
+- **Runtime**: Tauri v2 (Rust + WebView2)
+- **Backend**: Rust — `src-tauri/`
+- **Frontend**: React 18 + TypeScript + Vite
+- **Database**: SQLite via `rusqlite` (bundled)
+- **Windows APIs**: `windows` crate (ToolHelp32, PDH, SetThreadExecutionState, powercfg)
+- **CLI**: `clap` v4
+
+### Ozvil Key Files
+- `ozvil/src-tauri/src/core/` — Rules engine, session manager, snapshot/restore, activity logger
+- `ozvil/src-tauri/src/windows_adapter/` — All native Windows OS integrations
+- `ozvil/src-tauri/src/profiles/builtin.rs` — 6 built-in workload profiles
+- `ozvil/src-tauri/src/cli/mod.rs` — Full CLI (`ozvil status`, `start`, `dry-run`, `restore`, `logs export`, etc.)
+- `ozvil/src-tauri/src/commands/mod.rs` — All Tauri `invoke` command handlers
+- `ozvil/src/pages/` — Dashboard, ProfileEditor, ActivityLog, DryRunPreview, RestoreCenter, Settings
+- `ozvil/tests/` — Unit tests using mock Windows adapter (run on any platform)
+
 ## Stack
 
 - **Monorepo tool**: pnpm workspaces
