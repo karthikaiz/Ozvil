@@ -104,6 +104,19 @@ if !errorLevel! neq 0 (
     echo         Try running: rustup component add rust-std --target x86_64-pc-windows-msvc
     pause & exit /b 1
 )
+
+:: ── Pin the Rust environment explicitly so elevated sessions use the ─────────
+:: ── correct user install (avoids RUSTUP_HOME mismatch under UAC) ────────────
+for /f "tokens=*" %%h in ('rustup show home 2^>nul') do set "RUSTUP_HOME=%%h"
+for /f "tokens=*" %%s in ('rustup show active-toolchain 2^>nul') do set "_TC=%%s"
+if not defined RUSTUP_HOME (
+    set "RUSTUP_HOME=%USERPROFILE%\.rustup"
+)
+set "CARGO_HOME=%USERPROFILE%\.cargo"
+set "PATH=%CARGO_HOME%\bin;%PATH%"
+echo       Rust env: RUSTUP_HOME=%RUSTUP_HOME%
+echo       Sysroot :
+for /f "tokens=*" %%s in ('rustc --print sysroot 2^>nul') do echo         %%s
 for /f "tokens=*" %%v in ('rustc --version 2^>nul') do echo       %%v
 
 :: ════════════════════════════════════════════════════════════════
