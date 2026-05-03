@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import type { Session } from "../types";
 import { useAppContext } from "../hooks/useAppContext";
-import { formatDistanceToNow, format } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
 
 export default function RestoreCenter() {
   const { activeSession, refreshSession, profiles } = useAppContext();

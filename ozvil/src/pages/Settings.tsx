@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Save, Shield, Clock, Database, Bell, AlertTriangle } from "lucide-react";
-import type { Settings } from "../types";
+import type { Settings, ApprovalMode } from "../types";
 import { useAppContext } from "../hooks/useAppContext";
 
 export default function SettingsPage() {
@@ -15,7 +15,7 @@ export default function SettingsPage() {
     // Subsequent context updates (e.g. toggleGlobalPause refreshing settings)
     // must not overwrite pending edits the user hasn't saved yet.
     if (settings && !draft) setDraft({ ...settings });
-  }, [settings]);
+  }, [settings, draft]);
 
   const handleSave = async () => {
     if (!draft) return;
@@ -107,7 +107,7 @@ export default function SettingsPage() {
               className="input"
               style={{ width: 220 }}
               value={draft.default_approval_mode}
-              onChange={(e) => setDraft({ ...draft, default_approval_mode: e.target.value as any })}
+              onChange={(e) => setDraft({ ...draft, default_approval_mode: e.target.value as ApprovalMode })}
             >
               <option value="ask_first">Ask First (recommended)</option>
               <option value="automatic_after_trusted">Automatic After Trusted</option>

@@ -9,12 +9,9 @@ import {
   Save,
   Download,
   Upload,
-  ArrowLeft,
-  ChevronDown,
-  ChevronUp,
   Edit3,
 } from "lucide-react";
-import type { Profile, Trigger, Action, ModeType } from "../types";
+import type { Profile, Trigger, Action, ModeType, RestorePolicy, ApprovalMode } from "../types";
 import { useAppContext } from "../hooks/useAppContext";
 import { MODE_LABELS } from "../types";
 
@@ -282,7 +279,7 @@ export default function ProfileEditor() {
                     <select
                       className="input"
                       value={draft.restore_policy ?? "on_app_quit"}
-                      onChange={(e) => setDraft({ ...draft, restore_policy: e.target.value as any })}
+                      onChange={(e) => setDraft({ ...draft, restore_policy: e.target.value as RestorePolicy })}
                     >
                       <option value="on_app_quit">On App Quit</option>
                       <option value="on_resource_idle">On Resource Idle</option>
@@ -294,7 +291,7 @@ export default function ProfileEditor() {
                     <select
                       className="input"
                       value={draft.approval_mode ?? "ask_first"}
-                      onChange={(e) => setDraft({ ...draft, approval_mode: e.target.value as any })}
+                      onChange={(e) => setDraft({ ...draft, approval_mode: e.target.value as ApprovalMode })}
                     >
                       <option value="ask_first">Ask First</option>
                       <option value="automatic_after_trusted">Automatic After Trusted</option>

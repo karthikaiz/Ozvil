@@ -28,6 +28,7 @@ export default function ActivityLogPage() {
   useEffect(() => {
     invoke<ActivityLog[]>("get_activity_logs", { limit: 500 })
       .then(setLogs)
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 

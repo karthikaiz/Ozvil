@@ -11,26 +11,25 @@ import {
   MemoryStick,
   Clock,
   AlertTriangle,
-  CheckCircle2,
   Moon,
 } from "lucide-react";
 import { useAppContext } from "../hooks/useAppContext";
 import PressureBar from "../components/PressureBar";
 import TopOffenderList from "../components/TopOffenderList";
 import StatusBadge from "../components/StatusBadge";
-import type { ModeType, Profile } from "../types";
-import { MODE_LABELS, MODE_COLORS } from "../types";
+import type { ModeType, Profile, Session, Action } from "../types";
+import { MODE_COLORS } from "../types";
 import { formatDistanceToNow } from "date-fns";
 
 export default function Dashboard() {
-  const { appInfo, activeSession, systemStatus, profiles, refreshSession, refreshStatus } =
+  const { appInfo, activeSession, systemStatus, profiles, refreshSession } =
     useAppContext();
   const navigate = useNavigate();
   const [offenderTab, setOffenderTab] = useState<"cpu" | "ram">("cpu");
-  const [staleSessions, setStaleSessions] = useState<any[]>([]);
+  const [staleSessions, setStaleSessions] = useState<Session[]>([]);
 
   useEffect(() => {
-    invoke<any[]>("get_stale_sessions")
+    invoke<Session[]>("get_stale_sessions")
       .then(setStaleSessions)
       .catch(() => {});
   }, []);
@@ -405,7 +404,7 @@ function ActiveSessionPanel({
   onRestore,
 }: {
   profile: Profile;
-  session: any;
+  session: Session;
   onStop: () => void;
   onRestore: () => void;
 }) {
@@ -472,17 +471,19 @@ function ActiveSessionPanel({
   );
 }
 
-function ActionChip({ action }: { action: any }) {
-  const labels: Record<string, string> = {
-    prevent_sleep: "🌙 Sleep Prevented",
-    reduce_interruptions: "🔕 Interruptions Reduced",
-    set_power_plan: "⚡ High Performance",
-    watch_battery: "🔋 Battery Watch",
-    watch_memory: "💾 RAM Watch",
-    watch_cpu: "⚙️ CPU Watch",
-    pause_approved_app: `⏸ ${action.app_id ?? "App"} Paused`,
-    run_approved_script: "📜 Script Running",
-  };
+function ActionChip({ action }: { action: Action }) {
+  let label: string;
+  switch (action.kind) {
+    case "prevent_sleep":        label = "🌙 Sleep Prevented"; break;
+    case "reduce_interruptions": label = "🔕 Interruptions Reduced"; break;
+    case "set_power_plan":       label = "⚡ High Performance"; break;
+    case "watch_battery":        label = "🔋 Battery Watch"; break;
+    case "watch_memory":         label = "💾 RAM Watch"; break;
+    case "watch_cpu":            label = "⚙️ CPU Watch"; break;
+    case "pause_approved_app":   label = `⏸ ${action.app_id} Paused`; break;
+    case "run_approved_script":  label = "📜 Script Running"; break;
+    default:                     label = (action as { kind: string }).kind;
+  }
 
   return (
     <div
@@ -495,7 +496,7 @@ function ActionChip({ action }: { action: any }) {
         color: "var(--text-secondary)",
       }}
     >
-      {labels[action.kind] ?? action.kind}
+      {label}
     </div>
   );
 }

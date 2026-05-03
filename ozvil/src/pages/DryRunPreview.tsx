@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   XCircle,
   AlertTriangle,
-  Info,
 } from "lucide-react";
 import type { DryRunResult, Action } from "../types";
 
