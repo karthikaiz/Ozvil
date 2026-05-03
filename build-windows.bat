@@ -32,7 +32,7 @@ echo.
 :: ════════════════════════════════════════════════════════════════
 :: STEP 1 — Chocolatey
 :: ════════════════════════════════════════════════════════════════
-echo [1/9] Checking Chocolatey...
+echo [1/8] Checking Chocolatey...
 where choco >nul 2>&1
 if %errorLevel% neq 0 (
     echo       Installing Chocolatey...
@@ -52,7 +52,7 @@ if %errorLevel% neq 0 (
 :: STEP 2 — Visual Studio 2022 Build Tools (MSVC + Windows SDK)
 :: ════════════════════════════════════════════════════════════════
 echo.
-echo [2/9] Checking Visual Studio Build Tools (MSVC C++ toolchain)...
+echo [2/8] Checking Visual Studio Build Tools (MSVC C++ toolchain)...
 if exist "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC" (
     echo       MSVC already installed.
 ) else if exist "%ProgramFiles%\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC" (
@@ -71,12 +71,10 @@ if exist "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\BuildTools\VC\Tools\M
 )
 
 :: ════════════════════════════════════════════════════════════════
-:: STEP 3 — Rust (via rustup — MSVC toolchain, NOT GNU)
-::          choco install rust installs the GNU toolchain which
-::          does NOT work with Tauri. Use rustup.install instead.
+:: STEP 3 — Rust via rustup (MSVC toolchain — NOT GNU)
 :: ════════════════════════════════════════════════════════════════
 echo.
-echo [3/9] Checking Rust (MSVC toolchain)...
+echo [3/8] Checking Rust (MSVC toolchain)...
 where rustup >nul 2>&1
 if %errorLevel% neq 0 (
     echo       Installing Rustup...
@@ -87,8 +85,6 @@ if %errorLevel% neq 0 (
     )
     call :refresh_path
 )
-
-:: Set default to MSVC toolchain and add target
 echo       Setting MSVC toolchain as default...
 rustup default stable-msvc >nul 2>&1
 rustup target add x86_64-pc-windows-msvc >nul 2>&1
@@ -98,7 +94,7 @@ for /f "tokens=*" %%v in ('rustc --version 2^>nul') do echo       %%v
 :: STEP 4 — Node.js LTS
 :: ════════════════════════════════════════════════════════════════
 echo.
-echo [4/9] Checking Node.js...
+echo [4/8] Checking Node.js...
 where node >nul 2>&1
 if %errorLevel% neq 0 (
     echo       Installing Node.js LTS...
@@ -117,7 +113,7 @@ if %errorLevel% neq 0 (
 :: STEP 5 — NSIS (for the .exe installer)
 :: ════════════════════════════════════════════════════════════════
 echo.
-echo [5/9] Checking NSIS...
+echo [5/8] Checking NSIS...
 where makensis >nul 2>&1
 if %errorLevel% neq 0 (
     echo       Installing NSIS...
@@ -133,27 +129,28 @@ if %errorLevel% neq 0 (
 )
 
 :: ════════════════════════════════════════════════════════════════
-:: STEP 6 — pnpm + Tauri CLI
+:: STEP 6 — npm install inside ozvil/ (NOT pnpm — avoids workspace
+::          symlink issues on exFAT/FAT32 drives entirely)
+::          This installs @tauri-apps/cli locally so tauri is
+::          available as node_modules\.bin\tauri in the next step.
 :: ════════════════════════════════════════════════════════════════
 echo.
-echo [6/9] Installing pnpm and Tauri CLI...
-where pnpm >nul 2>&1
+echo [6/8] Installing ozvil frontend dependencies...
+echo       Using npm (avoids pnpm workspace symlink issues on exFAT)...
+cd /d "%OZVIL_DIR%"
+call npm install
 if %errorLevel% neq 0 (
-    echo       Installing pnpm globally...
-    call npm install -g pnpm
-    call :refresh_path
+    echo [ERROR] npm install failed.
+    pause & exit /b 1
 )
-for /f "tokens=*" %%v in ('pnpm --version 2^>nul') do echo       pnpm %%v
-
-echo       Installing @tauri-apps/cli...
-call pnpm add -g @tauri-apps/cli@^2 --silent
-call :refresh_path
 
 :: ════════════════════════════════════════════════════════════════
 :: STEP 7 — Generate required icon and image assets
+::          Now that node_modules exists, tauri CLI is available
+::          locally at node_modules\.bin\tauri
 :: ════════════════════════════════════════════════════════════════
 echo.
-echo [7/9] Generating icon assets...
+echo [7/8] Generating icon assets...
 
 if not exist "%TAURI_DIR%\icons" mkdir "%TAURI_DIR%\icons"
 
@@ -166,10 +163,10 @@ if not exist "%TAURI_DIR%\icons\app-icon.png" (
     pause & exit /b 1
 )
 
-:: Use tauri icon to generate all sizes
+:: Use local tauri (from node_modules) to generate all icon sizes
 cd /d "%OZVIL_DIR%"
 echo       Running tauri icon generation...
-call pnpm tauri icon "src-tauri\icons\app-icon.png"
+call node_modules\.bin\tauri icon "src-tauri\icons\app-icon.png"
 if !errorLevel! neq 0 (
     echo [WARN] tauri icon failed - using manual placeholders...
     copy "%TAURI_DIR%\icons\app-icon.png" "%TAURI_DIR%\icons\32x32.png" >nul
@@ -194,31 +191,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
     "Add-Type -AssemblyName System.Drawing; $c=[System.Drawing.Color]::FromArgb(255,99,102,241); $h=New-Object System.Drawing.Bitmap(150,57); $g=[System.Drawing.Graphics]::FromImage($h); $g.Clear($c); $g.Dispose(); $h.Save('%TAURI_DIR%\nsis\header.bmp',[System.Drawing.Imaging.ImageFormat]::Bmp); $h.Dispose(); $s=New-Object System.Drawing.Bitmap(164,314); $g=[System.Drawing.Graphics]::FromImage($s); $g.Clear($c); $g.Dispose(); $s.Save('%TAURI_DIR%\nsis\sidebar.bmp',[System.Drawing.Imaging.ImageFormat]::Bmp); $s.Dispose(); Write-Host 'NSIS images created.'"
 
 :: ════════════════════════════════════════════════════════════════
-:: STEP 8 — Install frontend dependencies
-::          node-linker=hoisted avoids symlink errors on exFAT/FAT32
+:: STEP 8 — Build Ozvil using local tauri CLI
 :: ════════════════════════════════════════════════════════════════
 echo.
-echo [8/9] Installing frontend dependencies (pnpm install)...
-cd /d "%OZVIL_DIR%"
-
-:: Write .npmrc with hoisted linker to support exFAT/FAT32 drives
-echo node-linker=hoisted> "%OZVIL_DIR%\.npmrc"
-
-call pnpm install
-if %errorLevel% neq 0 (
-    echo [ERROR] pnpm install failed.
-    pause & exit /b 1
-)
-
-:: ════════════════════════════════════════════════════════════════
-:: STEP 9 — Build Ozvil (NSIS .exe installer)
-:: ════════════════════════════════════════════════════════════════
-echo.
-echo [9/9] Building Ozvil...
+echo [8/8] Building Ozvil...
 echo       Compiling Rust + React. First build takes 5-15 minutes.
 echo.
 cd /d "%OZVIL_DIR%"
-call pnpm tauri build --target x86_64-pc-windows-msvc --bundles nsis
+call node_modules\.bin\tauri build --target x86_64-pc-windows-msvc --bundles nsis
 if %errorLevel% neq 0 (
     echo.
     echo [ERROR] Build failed. Common causes:
