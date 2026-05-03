@@ -15,6 +15,10 @@
     "fs:allow-app-data-write",
     "notification:allow-notify",
     "process:allow-exit",
-    "process:allow-restart"
+    "process:allow-restart",
+    "updater:allow-check",
+    "updater:allow-download",
+    "updater:allow-download-and-install",
+    "updater:allow-install"
   ]
 }

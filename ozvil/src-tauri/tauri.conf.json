@@ -35,7 +35,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis", "msi"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -43,26 +43,56 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "publisher": "Ozvil",
+    "copyright": "Copyright © 2026 Ozvil",
+    "category": "Utility",
+    "shortDescription": "Windows workload modes for heavy apps",
+    "longDescription": "Ozvil clears the runway for your Windows PC when heavy work starts, protects the session, and restores everything afterward. Profile-based automation for creators, developers, and gamers.",
     "windows": {
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
-      "timestampUrl": "",
+      "timestampUrl": "http://timestamp.digicert.com",
       "wix": {
         "language": "en-US",
-        "shortcutName": "Ozvil",
-        "menuItems": [
-          {
-            "name": "Ozvil",
-            "desktop": true,
-            "startMenu": true
-          },
-          {
-            "name": "Ozvil (Safe Mode)",
-            "desktop": false,
-            "startMenu": true,
-            "arguments": "--safe-mode"
-          }
-        ]
+        "template": "wix/main.wxs",
+        "fragmentPaths": ["wix/safe_mode_shortcut.wxs"],
+        "componentGroupRefs": ["OzvilSafeModeShortcutGroup"]
+      },
+      "nsis": {
+        "template": "nsis/installer.nsi",
+        "installerIcon": "icons/icon.ico",
+        "headerImage": "nsis/header.bmp",
+        "sidebarImage": "nsis/sidebar.bmp",
+        "license": "nsis/license.rtf",
+        "installMode": "perMachine",
+        "languages": ["English"],
+        "customNsisFolderPath": "nsis",
+        "displayLanguageSelector": false
+      }
+    },
+    "updater": {
+      "active": true,
+      "dialog": true,
+      "pubkey": "PLACEHOLDER_REPLACE_WITH_OUTPUT_OF_tauri_signer_generate",
+      "endpoints": [
+        "https://update.ozvil.app/{{target}}/{{arch}}/{{current_version}}"
+      ],
+      "windows": {
+        "installerArgs": ["/S"],
+        "onInstallMode": "passive"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "PLACEHOLDER_REPLACE_WITH_OUTPUT_OF_tauri_signer_generate",
+      "endpoints": [
+        "https://update.ozvil.app/{{target}}/{{arch}}/{{current_version}}"
+      ],
+      "dialog": true,
+      "windows": {
+        "installerArgs": ["/S"],
+        "onInstallMode": "passive"
       }
     }
   }

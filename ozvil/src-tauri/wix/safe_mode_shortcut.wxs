@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Ozvil Safe Mode Start Menu Shortcut Fragment
+  Creates the dedicated "Ozvil (Safe Mode)" shortcut as required by spec:
+  "The Windows installer must create a dedicated Start Menu shortcut named
+   'Ozvil (Safe Mode)' that passes the safe-mode flag."
+
+  This fragment is referenced via tauri.conf.json > bundle.windows.wix.fragmentPaths
+  and bundle.windows.wix.componentGroupRefs.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+
+  <Fragment>
+
+    <!--
+      Safe Mode shortcut lives in the same Start Menu program folder as the
+      main Ozvil shortcut so users can find both easily.
+    -->
+    <DirectoryRef Id="OzvilProgramMenuDir">
+      <Component Id="OzvilSafeModeShortcutComponent"
+                 Guid="6A3F8B2D-1E4C-4D9A-8F05-2C7B1A3E9D6F"
+                 KeyPath="yes">
+
+        <Shortcut
+          Id="OzvilSafeModeStartMenuShortcut"
+          Name="Ozvil (Safe Mode)"
+          Description="Launch Ozvil with automation fully disabled. Use this if a profile or script is causing problems."
+          Target="[INSTALLDIR]ozvil.exe"
+          Arguments="--safe-mode"
+          WorkingDirectory="INSTALLDIR"
+          Icon="OzvilIcon" />
+
+        <!-- Remove the shortcut on uninstall -->
+        <RemoveFolder Id="CleanUpOzvilSafeModeShortcut"
+                      Directory="OzvilProgramMenuDir"
+                      On="uninstall" />
+
+        <!-- Registry key to satisfy WiX KeyPath requirement -->
+        <RegistryValue
+          Root="HKCU"
+          Key="Software\Ozvil"
+          Name="SafeModeShortcutInstalled"
+          Value="1"
+          Type="integer" />
+
+      </Component>
+    </DirectoryRef>
+
+    <ComponentGroup Id="OzvilSafeModeShortcutGroup">
+      <ComponentRef Id="OzvilSafeModeShortcutComponent" />
+    </ComponentGroup>
+
+  </Fragment>
+
+</Wix>

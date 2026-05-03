@@ -1,0 +1,16 @@
+{
+  "_comment": "This is the response format Ozvil's updater endpoint must return.",
+  "_comment2": "Host this at: https://update.ozvil.app/windows/x86_64/<current_version>",
+  "_comment3": "Return HTTP 204 (no content) when no update is available.",
+  "_comment4": "Return HTTP 200 with this body when an update IS available.",
+
+  "version": "0.2.0",
+  "notes": "## What's new in v0.2.0\n\n- Studio Mode burst-aware trigger improvements\n- Build Mode stall alert for local AI processes\n- Top CPU/RAM offender list performance improvements\n- Fix: stale session restore prompt not appearing after Windows reboot",
+  "pub_date": "2026-06-01T12:00:00Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "PASTE_BASE64_SIG_FROM_DOT_SIG_FILE_HERE",
+      "url": "https://github.com/your-org/ozvil/releases/download/v0.2.0/Ozvil_0.2.0_x64-setup.exe"
+    }
+  }
+}

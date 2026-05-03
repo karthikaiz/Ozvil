@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Ozvil WiX MSI Installer
+  Extends Tauri's default WiX template with the Safe Mode Start Menu shortcut.
+  See: https://v2.tauri.app/distribute/windows-installer/
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+
+  <?include $(sys.CURRENTDIR)/variables.wxi ?>
+
+  <Package
+    Name="$(var.ProductName)"
+    Manufacturer="$(var.Manufacturer)"
+    Version="$(var.Version)"
+    UpgradeCode="$(var.UpgradeCode)"
+    Language="1033"
+    Codepage="1252"
+    Scope="perMachine">
+
+    <SummaryInformation
+      Keywords="Installer"
+      Description="$(var.ProductName) Installer"
+      Manufacturer="$(var.Manufacturer)" />
+
+    <!-- Upgrade logic: always remove old version before installing new -->
+    <MajorUpgrade
+      Schedule="afterInstallInitialize"
+      DowngradeErrorMessage="A newer version of $(var.ProductName) is already installed." />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <ui:WixUI Id="WixUI_InstallDir" />
+    <ui:WixUI Id="WixUI_ErrorProgressText" />
+
+    <WixVariable Id="WixUILicenseRtf" Value="!(wix.WixUILicenseRtf)" />
+    <WixVariable Id="WixUIBannerBmp"   Value="!(wix.WixUIBannerBmp)" />
+    <WixVariable Id="WixUIDialogBmp"   Value="!(wix.WixUIDialogBmp)" />
+
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLDIR" />
+
+    <Feature Id="ProductFeature" Title="$(var.ProductName)" Level="1">
+      <ComponentGroupRef Id="ProductComponents" />
+      <ComponentGroupRef Id="ProductIcons" />
+      <ComponentGroupRef Id="OzvilStartMenuGroup" />
+      <ComponentGroupRef Id="OzvilSafeModeShortcutGroup" />
+    </Feature>
+
+  </Package>
+</Wix>

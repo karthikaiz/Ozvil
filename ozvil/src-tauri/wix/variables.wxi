@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  WiX Variables — set by the Tauri build process.
+  Values here are overridden by tauri-build at bundle time.
+  Keep in sync with tauri.conf.json.
+-->
+<Include xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <?define ProductName    = "Ozvil"               ?>
+  <?define Manufacturer   = "Ozvil"               ?>
+  <?define Version        = "0.1.0"               ?>
+  <?define UpgradeCode    = "A7C2F3E1-8B4D-4E9A-BC15-3F6D2A7E1C08" ?>
+</Include>
