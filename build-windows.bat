@@ -114,29 +114,34 @@ if !errorLevel! neq 0 (
     pause & exit /b 1
 )
 
-:: ── Verify sysroot files actually exist on disk (registry says installed ──────
-:: ── but files can be missing if the initial download was interrupted)   ──────
+:: ── Verify sysroot .rlib files actually exist (not just the directory) ───────
 echo       Verifying sysroot files on disk...
 set "_SYSROOT=%RUSTUP_HOME%\toolchains\stable-x86_64-pc-windows-msvc"
 set "_TARGET_LIB=%_SYSROOT%\lib\rustlib\x86_64-pc-windows-msvc\lib"
 
 echo       Sysroot: %_SYSROOT%
-if exist "%_TARGET_LIB%\" (
-    echo       [OK] Target sysroot lib found.
-) else (
-    echo       [WARN] Sysroot lib missing — reinstalling toolchain...
+dir "%_TARGET_LIB%\libcore*.rlib" >nul 2>&1
+if !errorLevel! neq 0 (
+    echo       [WARN] libcore not found in sysroot — reinstalling toolchain...
     rustup toolchain uninstall stable-x86_64-pc-windows-msvc
     rustup toolchain install stable-x86_64-pc-windows-msvc
-    rustup target add x86_64-pc-windows-msvc
-    if not exist "%_TARGET_LIB%\" (
-        echo [ERROR] Sysroot still missing after reinstall.
-        echo         Expected: %_TARGET_LIB%
+    dir "%_TARGET_LIB%\libcore*.rlib" >nul 2>&1
+    if !errorLevel! neq 0 (
+        echo [ERROR] libcore still missing after reinstall: %_TARGET_LIB%
         pause & exit /b 1
     )
-    echo       [OK] Toolchain reinstalled successfully.
+    echo       [OK] Toolchain reinstalled — libcore found.
+) else (
+    echo       [OK] libcore found in sysroot.
 )
 
-for /f "tokens=*" %%v in ('rustc --version 2^>nul') do echo       %%v
+:: ── Point tauri/cargo to the real cargo binary (bypasses rustup shim chain) ─
+:: ── This prevents the Node.js subprocess from resolving a wrong cargo      ─
+set "CARGO=%_SYSROOT%\bin\cargo.exe"
+set "RUSTC=%_SYSROOT%\bin\rustc.exe"
+echo       CARGO: %CARGO%
+
+for /f "tokens=*" %%v in ('"%RUSTC%" --version 2^>nul') do echo       %%v
 
 :: ════════════════════════════════════════════════════════════════
 :: STEP 4 — Node.js LTS
