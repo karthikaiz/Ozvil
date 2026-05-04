@@ -41,6 +41,7 @@ once_cell = "1"
 parking_lot = "0.12"
 csv = "1"
 semver = { version = "1", features = ["serde"] }
+dirs = "5"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = [

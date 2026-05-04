@@ -9,10 +9,6 @@ pub struct PerformanceReading {
 #[cfg(target_os = "windows")]
 pub fn read_performance() -> Result<PerformanceReading> {
     use windows::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
-    use windows::Win32::System::Performance::{
-        PdhOpenQueryW, PdhAddCounterW, PdhCollectQueryData, PdhGetFormattedCounterValue,
-        PDH_FMT_DOUBLE,
-    };
 
     let mut mem = MEMORYSTATUSEX {
         dwLength: std::mem::size_of::<MEMORYSTATUSEX>() as u32,

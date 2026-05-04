@@ -1,4 +1,3 @@
-use crate::windows_adapter::WindowsAdapter;
 use std::time::Duration;
 
 /// Adaptive monitoring loop. Polls faster when active sessions or watched

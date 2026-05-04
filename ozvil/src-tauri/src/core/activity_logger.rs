@@ -91,18 +91,20 @@ impl ActivityLogger {
                   result, failure_reason, restore_status, metadata, created_at
                  FROM activity_logs WHERE session_id = ?1 ORDER BY created_at DESC LIMIT ?2",
             )?;
-            stmt.query_map(params![sid, limit], parse)?
+            let result: Vec<ActivityLog> = stmt.query_map(params![sid, limit], parse)?
                 .filter_map(|r| r.ok())
-                .collect()
+                .collect();
+            result
         } else {
             let mut stmt = conn.prepare(
                 "SELECT id, session_id, profile_id, event_type, action_kind, trigger_kind,
                   result, failure_reason, restore_status, metadata, created_at
                  FROM activity_logs ORDER BY created_at DESC LIMIT ?1",
             )?;
-            stmt.query_map(params![limit], parse)?
+            let result: Vec<ActivityLog> = stmt.query_map(params![limit], parse)?
                 .filter_map(|r| r.ok())
-                .collect()
+                .collect();
+            result
         };
 
         Ok(rows)

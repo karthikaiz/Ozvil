@@ -490,8 +490,8 @@ pub async fn upsert_approved_app(app: ApprovedApp, state: State<'_, AppState>) -
             a.id,
             a.name,
             a.process_name,
-            serde_json::to_string(&a.action).map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?,
-            serde_json::to_string(&a.profile_ids).map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?,
+            serde_json::to_string(&a.action).map_err(|e| e.to_string())?,
+            serde_json::to_string(&a.profile_ids).map_err(|e| e.to_string())?,
             a.created_at.to_rfc3339(),
         ],
     )

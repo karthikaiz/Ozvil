@@ -1,7 +1,6 @@
 use crate::db::models::{
     ModeType, Profile, Session, SessionStatus, SystemStatus, Trigger, TriggerSource,
 };
-use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct TriggerMatch {

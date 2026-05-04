@@ -191,7 +191,7 @@ fn cmd_profiles_list(db: &std::sync::Arc<crate::db::Database>) {
     }
 }
 
-fn cmd_start(db: &std::sync::Arc<crate::db::Database>, profile_ref: &str, safe_mode: bool) {
+fn cmd_start(_db: &std::sync::Arc<crate::db::Database>, profile_ref: &str, safe_mode: bool) {
     if safe_mode {
         eprintln!("ozvil start: Safe Mode is active. Automation is disabled.");
         std::process::exit(1);
