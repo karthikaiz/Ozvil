@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct Profile {
     pub id: String,
     pub name: String,
@@ -84,7 +83,6 @@ pub enum ApprovalMode {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct Session {
     pub id: String,
     pub profile_id: String,
@@ -117,7 +115,6 @@ pub enum SessionStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct SystemSnapshot {
     pub power_plan_id: Option<String>,
     pub power_plan_name: Option<String>,
@@ -128,7 +125,6 @@ pub struct SystemSnapshot {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct AppliedAction {
     pub action: Action,
     pub result: ActionResult,
@@ -146,7 +142,6 @@ pub enum ActionResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct ActivityLog {
     pub id: String,
     pub session_id: Option<String>,
@@ -182,7 +177,6 @@ pub enum EventType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct ApprovedApp {
     pub id: String,
     pub name: String,
@@ -200,7 +194,6 @@ pub enum AppControlAction {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct SystemStatus {
     pub cpu_percent: f64,
     pub ram_used_mb: u64,
@@ -219,7 +212,6 @@ pub struct SystemStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct ProcessInfo {
     pub pid: u32,
     pub name: String,
@@ -228,7 +220,6 @@ pub struct ProcessInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub global_pause: bool,
     pub safe_mode: bool,
@@ -260,7 +251,6 @@ impl Default for Settings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct AgentStatus {
     pub mode: String,
     pub pressure: String,
@@ -271,7 +261,6 @@ pub struct AgentStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct DryRunResult {
     pub profile_id: String,
     pub profile_name: String,
@@ -282,7 +271,6 @@ pub struct DryRunResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct PlannedAction {
     pub action: Action,
     pub feasible: bool,
