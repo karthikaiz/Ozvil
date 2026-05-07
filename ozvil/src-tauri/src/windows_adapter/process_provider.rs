@@ -26,9 +26,8 @@ pub fn list_processes() -> Result<Vec<ProcessInfo>> {
         TH32CS_SNAPPROCESS,
     };
     use windows::Win32::System::ProcessStatus::{GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
-    use windows::Win32::System::SystemInformation::GetSystemTimes;
     use windows::Win32::System::Threading::{
-        GetProcessTimes, OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
+        GetProcessTimes, GetSystemTimes, OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
     };
 
     fn ft_u64(ft: &FILETIME) -> u64 {
