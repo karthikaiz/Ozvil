@@ -11,6 +11,22 @@ use rusqlite::params;
 use std::sync::Arc;
 use uuid::Uuid;
 
+/// Serialize a simple string enum to a plain SQL value (no JSON quotes).
+/// serde_json::to_string produces `"active"` (with quotes) which breaks SQL WHERE comparisons.
+fn enum_to_sql<T: serde::Serialize>(val: &T) -> Result<String> {
+    let json = serde_json::to_string(val)?;
+    if json.starts_with('"') && json.ends_with('"') && json.len() >= 2 {
+        Ok(json[1..json.len() - 1].to_string())
+    } else {
+        Ok(json)
+    }
+}
+
+/// Deserialize a plain SQL string back to an enum by wrapping it in JSON quotes first.
+fn sql_to_enum<T: for<'de> serde::Deserialize<'de>>(s: &str) -> Option<T> {
+    serde_json::from_str(&format!("\"{}\"", s)).ok()
+}
+
 pub struct SessionManager {
     pub db: Arc<Database>,
 }
@@ -45,9 +61,9 @@ impl SessionManager {
             params![
                 session.id,
                 session.profile_id,
-                serde_json::to_string(&session.trigger_source)?,
+                enum_to_sql(&session.trigger_source)?,
                 session.started_at.to_rfc3339(),
-                serde_json::to_string(&session.status)?,
+                enum_to_sql(&session.status)?,
                 serde_json::to_string(&session.snapshot)?,
                 session.safe_mode as i32,
             ],
@@ -90,12 +106,10 @@ impl SessionManager {
                 Ok(Some(Session {
                     id,
                     profile_id,
-                    trigger_source: serde_json::from_str(&trigger_src)
-                        .unwrap_or(TriggerSource::ManualUi),
+                    trigger_source: sql_to_enum(&trigger_src).unwrap_or(TriggerSource::ManualUi),
                     started_at: started_at.parse().unwrap_or_else(|_| Utc::now()),
                     ended_at: ended_at.and_then(|s| s.parse().ok()),
-                    status: serde_json::from_str(&status)
-                        .unwrap_or(SessionStatus::Active),
+                    status: sql_to_enum(&status).unwrap_or(SessionStatus::Active),
                     snapshot: snapshot.and_then(|s| serde_json::from_str(&s).ok()),
                     safe_mode: safe_mode != 0,
                 }))
@@ -132,11 +146,10 @@ impl SessionManager {
             sessions.push(Session {
                 id,
                 profile_id,
-                trigger_source: serde_json::from_str(&trigger_src)
-                    .unwrap_or(TriggerSource::ManualUi),
+                trigger_source: sql_to_enum(&trigger_src).unwrap_or(TriggerSource::ManualUi),
                 started_at: started_at.parse().unwrap_or_else(|_| Utc::now()),
                 ended_at: ended_at.and_then(|s| s.parse().ok()),
-                status: serde_json::from_str(&status).unwrap_or(SessionStatus::Stale),
+                status: sql_to_enum(&status).unwrap_or(SessionStatus::Stale),
                 snapshot: snapshot.and_then(|s| serde_json::from_str(&s).ok()),
                 safe_mode: safe_mode != 0,
             });
