@@ -1,8 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use clap::Parser;
-use ozvil_lib::cli::{Cli, CliSubcommand};
-use ozvil_lib::core::AppState;
+use ozvil_lib::cli::Cli;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();

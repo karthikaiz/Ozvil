@@ -66,9 +66,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const toggleGlobalPause = useCallback(async () => {
-    const newVal = await invoke<boolean>("toggle_global_pause");
-    setSettings((prev) => prev ? { ...prev, global_pause: newVal } : prev);
-    setAppInfo((prev) => prev ? { ...prev, global_pause: newVal } : prev);
+    try {
+      const newVal = await invoke<boolean>("toggle_global_pause");
+      setSettings((prev) => prev ? { ...prev, global_pause: newVal } : prev);
+      setAppInfo((prev) => prev ? { ...prev, global_pause: newVal } : prev);
+    } catch {}
   }, []);
 
   useEffect(() => {
